@@ -31,6 +31,9 @@ class BaseSchema(Schema):
         
         Returns:
             序列化后的字典，自动过滤 None 值
+            例如：[{'id': 1, 'name': '计算机实验室', 'location': '教学楼A101'}, ...]
+            
+        SQLAlchemy ORM 对象 → Python 字典
         """
         result = super().dump(obj, many=many, **kwargs)
         

@@ -95,6 +95,8 @@ def get_equipments():
         status = request.args.get('status', type=int)
         
         # 构建缓存键（包含所有筛选条件）
+        # 查询 lab_id=1, keyword="显微镜", category=2, status=1
+        # api:equipment:list:lab_1:kw_显微镜:cat_2:st_1
         cache_key = f'api:equipment:list:lab_{lab_id}:kw_{keyword}:cat_{category}:st_{status}'
         
         # 尝试从缓存获取
