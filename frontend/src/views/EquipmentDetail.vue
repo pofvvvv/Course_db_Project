@@ -4,7 +4,7 @@
       type="primary" 
       :icon="ArrowLeft" 
       @click="router.back()"
-      style="margin-bottom: 20px"
+      style="margin-bottom: 20px; margin-right: 10px;"
     >
       返回
     </el-button>
@@ -39,7 +39,13 @@
         </el-descriptions-item>
       </el-descriptions>
 
-      <div class="detail-actions" v-if="userStore.isAdmin">
+      <div class="detail-actions">
+        <el-button v-if="!userStore.isAdmin && equipment.status === 1" type="primary" size="large" @click="handleBook">
+          <el-icon><Calendar /></el-icon>
+          立即预约
+        </el-button>
+        
+        <template v-if="userStore.isAdmin">
         <el-button type="warning" @click="handleEdit">
           <el-icon><Edit /></el-icon>
           编辑设备
@@ -48,6 +54,7 @@
           <el-icon><Delete /></el-icon>
           删除设备
         </el-button>
+        </template>
       </div>
     </el-card>
 
@@ -96,6 +103,34 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 预约对话框 -->
+    <el-dialog v-model="showBookDialog" title="预约设备" width="500px">
+      <el-form :model="bookForm" label-width="80px">
+        <el-form-item label="设备名称">
+          <el-input v-model="bookForm.equipmentName" disabled />
+        </el-form-item>
+        <el-form-item label="预约时间">
+          <el-date-picker
+            v-model="bookForm.timeRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            style="width: 100%"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
+          />
+        </el-form-item>
+        <el-form-item label="用途说明">
+          <el-input v-model="bookForm.description" type="textarea" rows="3" placeholder="请填写预约用途" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showBookDialog = false">取消</el-button>
+        <el-button type="primary" :loading="bookLoading" @click="submitBooking">提交预约</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -103,9 +138,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Edit, Delete } from '@element-plus/icons-vue'
+import { ArrowLeft, Edit, Delete, Calendar } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { getEquipmentById, updateEquipment, deleteEquipment } from '@/api/equipment'
+import { createReservation } from '@/api/reservation'
 import { getLabList } from '@/api/laboratory'
 
 const route = useRoute()
@@ -133,6 +169,15 @@ const editRules = {
 }
 
 const editFormRef = ref(null)
+
+// 预约相关
+const showBookDialog = ref(false)
+const bookLoading = ref(false)
+const bookForm = reactive({
+  equipmentName: '',
+  timeRange: [],
+  description: ''
+})
 
 // 获取设备详情
 const fetchEquipmentDetail = async () => {
@@ -230,6 +275,40 @@ const handleDelete = async () => {
   }
 }
 
+// 预约操作
+const handleBook = () => {
+  if (!equipment.value) return
+  bookForm.equipmentName = equipment.value.name
+  bookForm.timeRange = []
+  bookForm.description = ''
+  showBookDialog.value = true
+}
+
+const submitBooking = async () => {
+  if (!bookForm.timeRange || bookForm.timeRange.length < 2) {
+    ElMessage.warning('请选择预约时间')
+    return
+  }
+  bookLoading.value = true
+  try {
+    const data = {
+      equip_id: equipment.value.id, // 确保字段名为 equip_id
+      start_time: bookForm.timeRange[0],
+      end_time: bookForm.timeRange[1],
+      description: bookForm.description
+    }
+    const res = await createReservation(data)
+    if (res.code === 200) {
+      ElMessage.success('预约申请已提交')
+      showBookDialog.value = false
+    }
+  } catch (e) {
+    console.error(e)
+  } finally {
+    bookLoading.value = false
+  }
+}
+
 // 重置编辑表单
 const resetEditForm = () => {
   Object.assign(editForm, {
@@ -300,4 +379,3 @@ onMounted(() => {
   gap: 12px;
 }
 </style>
-
