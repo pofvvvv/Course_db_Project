@@ -65,7 +65,8 @@ def create_reservation(data, current_user):
         equip_name=equipment.name,
         price=data.get('price'),
         start_time=data.get('start_time'),
-        end_time=data.get('end_time')
+        end_time=data.get('end_time'),
+        description=data.get('description')
     )
     
     try:
@@ -162,6 +163,7 @@ def update_reservation_status(reservation_id, status, approver_id=None):
         3: []          # 取消 → 无
     }
     
+    old_status = reservation.status
     if status not in valid_transitions.get(reservation.status, []):
         raise ValidationError(f'无效的状态流转: {reservation.status} -> {status}')
     
@@ -170,10 +172,33 @@ def update_reservation_status(reservation_id, status, approver_id=None):
     if status in [1, 2]:  # 审批通过或拒绝
         reservation.approver_id = approver_id
         reservation.approve_time = datetime.utcnow()
+        
+    # 更新设备状态
+    equipment = Equipment.query.get(reservation.equip_id)
+    if equipment:
+        # 如果审批通过，将设备设为使用中 (2)
+        if status == 1 and old_status == 0:
+            equipment.status = 2
+        # 如果已通过的预约被取消，将设备设为可用 (1)
+        elif status == 3 and old_status == 1:
+            equipment.status = 1
     
     try:
         db.session.commit()
         
+        # 清除设备缓存，确保前端设备详情页能看到最新状态
+        if equipment:
+            redis_client.delete(f'api:equipment:detail:{equipment.id}')
+            
+            # 清除设备列表缓存，确保设备列表页状态同步更新
+            try:
+                client = redis_client.get_client()
+                keys = client.keys('api:equipment:list:*')
+                if keys:
+                    redis_client.delete(*keys)
+            except Exception as e:
+                print(f"Clear equipment list cache failed: {e}")
+            
         # 清除相关缓存
         _clear_reservation_cache(reservation_id=reservation_id)
         
@@ -223,7 +248,17 @@ def _clear_reservation_cache(reservation_id=None):
     if reservation_id:
         redis_client.delete(f'api:reservation:detail:{reservation_id}')
     
-    # 清除列表缓存（使用通配符删除所有相关缓存）
-    keys = redis_client.keys('api:reservation:list:*')
-    for key in keys:
-        redis_client.delete(key)
+    # 清除列表缓存
+    try:
+        client = redis_client.get_client()
+        # 清除用户预约列表缓存
+        keys = client.keys('api:reservation:list:*')
+        if keys:
+            redis_client.delete(*keys)
+        # 清除管理员预约列表缓存
+        admin_keys = client.keys('api:admin:reservation:list:*')
+        if admin_keys:
+            redis_client.delete(*admin_keys)
+    except Exception as e:
+        # 避免缓存操作失败影响主业务
+        print(f"Clear cache failed: {e}")

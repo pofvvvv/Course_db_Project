@@ -78,12 +78,20 @@ def create_reservation():
         if not json_data:
             return fail(code=400, msg='请求体不能为空')
         
+        # 手动提取 description，避免 Schema 验证报错（如果 Schema 未定义该字段）
+        description = json_data.get('description')
+        validate_data = json_data.copy()
+        if 'description' in validate_data:
+            del validate_data['description']
+
         # 验证数据
-        errors = reservation_create_schema.validate(json_data)
+        errors = reservation_create_schema.validate(validate_data)
         if errors:
             return fail(code=422, msg='数据验证失败', data=errors)
         
-        validated_data = reservation_create_schema.load(json_data)
+        validated_data = reservation_create_schema.load(validate_data)
+        if description:
+            validated_data['description'] = description
         
         # 获取当前用户
         current_user = get_current_user()

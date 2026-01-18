@@ -5,14 +5,24 @@
         <el-icon><Box /></el-icon>
         设备列表
       </h2>
-      <el-button 
-        v-if="userStore.isAdmin" 
-        type="primary" 
-        @click="showCreateDialog = true"
-      >
-        <el-icon><Plus /></el-icon>
-        新增设备
-      </el-button>
+      <div class="header-actions">
+        <el-button 
+          type="success" 
+          @click="router.push('/reservations')"
+          style="margin-right: 10px;"
+        >
+          <el-icon><Calendar /></el-icon>
+          {{ userStore.isAdmin ? '预约审批' : '我的预约' }}
+        </el-button>
+        <el-button 
+          v-if="userStore.isAdmin" 
+          type="primary" 
+          @click="showCreateDialog = true"
+        >
+          <el-icon><Plus /></el-icon>
+          新增设备
+        </el-button>
+      </div>
     </div>
 
     <!-- 搜索筛选区域 -->
@@ -240,7 +250,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Box,
+  Box, Calendar,
   Plus,
   Search,
   Refresh,
