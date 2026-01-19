@@ -183,9 +183,6 @@
                 description="暂无可用时间段"
                 v-if="selectedDate"
               />
-              <span v-else style="color: #909399; font-size: 13px;">
-                请先选择日期查看可用时间段
-              </span>
             </div>
           </div>
         </el-form-item>

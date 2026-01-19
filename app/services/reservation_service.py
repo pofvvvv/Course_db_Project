@@ -104,6 +104,10 @@ def _check_timeslot_availability(equip_id, start_time, end_time):
 def _check_reservation_conflict(equip_id, start_time, end_time, exclude_reservation_id=None):
     """
     检查预约时间是否与其他预约冲突
+    使用 SELECT ... FOR UPDATE 锁定相关行，防止并发冲突
+    
+    注意：为了更严格地防止并发问题，我们锁定设备的所有待审/已通过预约，
+    而不仅仅是冲突的预约。这样可以确保在检查期间，其他事务无法插入新的预约。
     
     Args:
         equip_id: 设备ID
@@ -114,22 +118,26 @@ def _check_reservation_conflict(equip_id, start_time, end_time, exclude_reservat
     Raises:
         ValidationError: 时间冲突
     """
-    # 查询同一设备上状态为待审(0)或已通过(1)的预约
-    query = Reservation.query.filter(
+    # 策略：锁定设备的所有待审/已通过预约（不仅仅是冲突的）
+    # 这样可以防止在检查期间，其他事务插入新的预约
+    base_query = Reservation.query.filter(
         Reservation.equip_id == equip_id,
         Reservation.status.in_([0, 1])  # 待审或已通过
     )
     
     if exclude_reservation_id:
-        query = query.filter(Reservation.id != exclude_reservation_id)
+        base_query = base_query.filter(Reservation.id != exclude_reservation_id)
     
-    # 检查时间冲突：max(start1, start2) < min(end1, end2)
-    conflicting_reservations = query.filter(
-        and_(
-            Reservation.start_time < end_time,
-            Reservation.end_time > start_time
-        )
-    ).all()
+    # 先锁定所有相关预约（防止并发插入）
+    # 使用 with_for_update(nowait=False) 等待锁释放
+    locked_reservations = base_query.with_for_update(nowait=False).all()
+    
+    # 然后检查时间冲突：max(start1, start2) < min(end1, end2)
+    conflicting_reservations = [
+        r for r in locked_reservations
+        if r.start_time and r.end_time and
+        r.start_time < end_time and r.end_time > start_time
+    ]
     
     if conflicting_reservations:
         conflict_info = [
@@ -212,11 +220,8 @@ def create_reservation(data, current_user):
         
         # 2. 检查是否在可用时间段内
         _check_timeslot_availability(data.get('equip_id'), start_time, end_time)
-        
-        # 3. 检查是否与其他预约冲突
-        _check_reservation_conflict(data.get('equip_id'), start_time, end_time)
     
-    # 创建预约
+    # 创建预约对象（先不提交）
     reservation = Reservation(
         equip_id=data['equip_id'],
         student_id=data.get('student_id'),
@@ -232,7 +237,15 @@ def create_reservation(data, current_user):
     )
     
     try:
+        # 在事务中：先检查冲突（使用锁），然后创建预约
+        # 这样可以确保检查和创建是原子操作
+        if start_time and end_time:
+            # 3. 检查是否与其他预约冲突（在事务中，使用锁）
+            _check_reservation_conflict(data.get('equip_id'), start_time, end_time)
+        
+        # 添加预约到会话（此时还在事务中）
         db.session.add(reservation)
+        # 提交事务（释放锁）
         db.session.commit()
         
         # 清除相关缓存

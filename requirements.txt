@@ -1,24 +1,42 @@
-Flask==3.0.0
-Werkzeug==3.0.1
+# ============================================
+# 高校大型仪器设备共享服务平台 - Python 依赖包
+# ============================================
 
-Flask-SQLAlchemy==3.1.1
-Flask-Migrate==4.0.5
-PyMySQL==1.1.0
-cryptography==41.0.7
+# ========== Web 框架 ==========
+Flask==3.0.0                    # Flask Web 框架
+Werkzeug==3.0.1                 # WSGI 工具库（Flask 依赖）
 
+# ========== 数据库相关 ==========
+Flask-SQLAlchemy==3.1.1        # Flask 的 SQLAlchemy 扩展（ORM）
+Flask-Migrate==4.0.5           # 数据库迁移工具
+PyMySQL==1.1.0                 # MySQL 数据库驱动
+cryptography==41.0.7            # 加密库（用于 TiDB Cloud SSL 连接）
 
-marshmallow==3.20.1
-Flask-Marshmallow==0.15.0
-marshmallow-sqlalchemy==0.29.0
+# ========== 数据序列化 ==========
+marshmallow==3.20.1            # 数据序列化/反序列化库
+Flask-Marshmallow==0.15.0      # Flask 的 Marshmallow 集成
+marshmallow-sqlalchemy==0.29.0 # Marshmallow 与 SQLAlchemy 集成
 
-flasgger==0.9.7.1
+# ========== API 文档 ==========
+flasgger==0.9.7.1              # Swagger UI 集成（API 文档）
 
-python-dotenv==1.0.0
+# ========== 认证与安全 ==========
+PyJWT==2.8.0                   # JWT Token 生成和验证
 
-click==8.1.7
+# ========== 缓存 ==========
+redis==5.0.1                   # Redis 客户端库
 
-redis==5.0.1
+# ========== 跨域支持 ==========
+flask-cors==4.0.0              # Flask CORS 支持
 
-PyJWT==2.8.0
+# ========== 工具库 ==========
+python-dotenv==1.0.0           # 环境变量管理（.env 文件支持）
+click==8.1.7                   # CLI 命令行工具（Flask CLI 依赖）
 
-flask-cors==4.0.0
+# ============================================
+# 注意：
+# 1. SQLAlchemy 会由 Flask-SQLAlchemy 自动安装
+# 2. 确保已安装 MySQL 或使用 TiDB Cloud 数据库
+# 3. 确保已安装并运行 Redis 服务
+# 4. 建议使用虚拟环境：python -m venv .venv
+# ============================================

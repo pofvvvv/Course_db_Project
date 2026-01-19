@@ -59,19 +59,23 @@
 │   │       ├── timeslot.py    # 时间段 API
 │   │       ├── auth.py        # 认证 API
 │   │       ├── users.py       # 用户信息 API
-│   │       ├── admin.py       # 管理员 API（设备、时间段、预约审批）
+│   │       ├── admin.py       # 管理员 API（设备、时间段、预约审批、统计）
+│   │       ├── auditlog.py    # 审计日志 API
 │   │       └── schemas/       # API 序列化模式
 │   ├── services/          # 业务逻辑层
 │   │   ├── lab_service.py # 实验室服务
 │   │   ├── equipment_service.py # 设备服务
 │   │   ├── reservation_service.py # 预约服务
-│   │   └── timeslot_service.py # 时间段服务
+│   │   ├── timeslot_service.py # 时间段服务
+│   │   ├── statistics_service.py # 统计服务
+│   │   └── auditlog_service.py # 审计日志服务
 │   ├── utils/             # 工具类
 │   │   ├── response.py    # 统一响应格式
 │   │   ├── exceptions.py # 异常处理
 │   │   ├── schemas.py     # 通用模式
 │   │   ├── auth.py        # JWT 认证工具
-│   │   └── redis_client.py # Redis 客户端
+│   │   ├── redis_client.py # Redis 客户端
+│   │   └── audit.py       # 审计日志装饰器
 │   └── commands/          # Flask CLI 命令
 │       └── seed.py        # 数据初始化命令
 ├── frontend/              # 前端应用
@@ -83,7 +87,8 @@
 │   │   │   ├── equipment.js  # 设备 API
 │   │   │   ├── laboratory.js # 实验室 API
 │   │   │   ├── reservation.js # 预约 API
-│   │   │   └── timeslot.js   # 时间段 API
+│   │   │   ├── timeslot.js   # 时间段 API
+│   │   │   └── statistics.js # 统计 API
 │   │   ├── components/   # Vue 组件
 │   │   ├── views/        # 页面视图
 │   │   │   ├── Home.vue      # 首页（含登录）
@@ -92,7 +97,11 @@
 │   │   │   ├── Reservations.vue # 预约管理
 │   │   │   ├── LaboratoryList.vue # 实验室管理（管理员）
 │   │   │   ├── Help.vue      # 帮助中心
-│   │   │   └── NotFound.vue # 404页面
+│   │   │   ├── NotFound.vue # 404页面
+│   │   │   ├── Process.vue   # 流程说明
+│   │   │   ├── Rules.vue     # 使用规则
+│   │   │   └── admin/        # 管理员页面
+│   │   │       └── Statistics.vue # 数据统计（管理员）
 │   │   ├── stores/       # Pinia 状态管理
 │   │   │   └── user.js       # 用户状态
 │   │   ├── router/       # 路由配置
@@ -108,6 +117,29 @@
 └── README.md             # 项目说明
 ```
 
+## 页面展示
+
+### 首页
+![首页](images/home_page.png)
+
+### 设备列表
+![设备列表](images/equipmentslist_page.png)
+
+### 预约详情
+![预约详情](images/rerse_detail.png)
+
+### 实验室管理
+![实验室管理](images/lab_list.png)
+
+### 数据统计
+![数据统计](images/data_anly.png)
+
+### 审计日志
+![审计日志](images/review_log.png)
+
+### 帮助中心
+![帮助中心](images/help_center.png)
+
 ## 功能模块
 
 ### 核心功能
@@ -118,21 +150,23 @@
 - **预约管理**: 设备预约申请、预约审批、预约查询、预约取消、状态管理（待审批/已通过/已拒绝/已取消）
 - **时间段管理**: 设备可用时间段配置、时间段查询、可用时间段计算、可用日期查询（管理员可增删改）
 - **用户管理**: 学生、教师、管理员三种角色管理
-- **审计日志**: 操作记录追踪（待实现）
+- **审计日志**: 操作记录追踪，自动记录管理员的关键操作（设备管理、时间段管理、预约审批）
+- **数据统计**: 设备统计、预约统计、用户统计、热门设备排行（管理员）
 - **缓存机制**: Redis 缓存，提升 API 响应速度
 
 ### 用户角色
 
 - **学生**: 查看设备信息、提交预约申请、查看预约状态、取消预约、查看可用时间段
 - **教师**: 查看设备信息、提交预约申请、查看预约状态、取消预约、查看可用时间段
-- **管理员**: 实验室管理（增删改）、设备管理（增删改）、时间段管理（增删改）、预约审批（通过/拒绝）、查看所有预约记录
+- **管理员**: 实验室管理（增删改）、设备管理（增删改）、时间段管理（增删改）、预约审批（通过/拒绝）、查看所有预约记录、查看数据统计、查看审计日志
 
 ### 认证与授权
 
-- **JWT Token**: 使用 JWT 进行用户认证
+- **JWT Token**: 使用 PyJWT 生成和验证 JWT Token，Token 有效期 7 天
 - **登录验证**: `@login_required` 装饰器，要求用户登录
 - **管理员权限**: `@admin_required` 装饰器，要求管理员权限
 - **密码加密**: 使用 `werkzeug.security` 进行密码哈希存储
+- **审计日志**: `@audit_log` 装饰器，自动记录管理员的关键操作
 
 ### 预约管理功能
 
@@ -150,6 +184,20 @@
 - **可用时间段计算**: 系统自动计算设备的可用时间段，排除已预约的时间段
 - **时间段查询**: 支持查询设备的所有时间段或仅激活的时间段
 - **可用日期查询**: 支持查询设备在未来一段时间内的可用日期（有可用时间段的日期）
+
+### 审计日志功能
+
+- **自动记录**: 使用装饰器 `@audit_log` 自动记录管理员的关键操作
+- **记录内容**: 操作人ID、操作时间、操作类型、操作详情（JSON格式）、IP地址
+- **操作类型**: 设备管理（创建/更新/删除）、时间段管理（创建/更新/删除）、预约审批（通过/拒绝）
+- **日志查询**: 管理员可以查询审计日志，支持按操作人、操作类型、时间范围筛选
+
+### 数据统计功能
+
+- **设备统计**: 设备总数、可用数、使用率、状态分布、类别分布
+- **预约统计**: 总预约数、待审批数、已通过数、已拒绝数、已取消数、通过率、拒绝率、最近30天趋势
+- **用户统计**: 学生总数、教师总数、管理员总数
+- **热门设备**: 近一周/近一月预约次数最多的设备排行
 
 ## 快速开始
 
@@ -445,8 +493,8 @@ flask db history
 ### 认证接口
 
 - `POST /api/v1/auth/login` - 用户登录（返回 JWT Token）
-  - 请求体: `{ "username": "学号/工号", "password": "密码" }`
-  - 响应: `{ "code": 200, "data": { "token": "...", "user": {...} } }`
+  - 请求体: `{ "username": "学号/工号", "password": "密码", "user_type": "student|teacher|admin" }`
+  - 响应: `{ "code": 200, "msg": "登录成功", "data": { "token": "...", "user": {...} } }`
 
 ### 用户接口
 
@@ -500,6 +548,14 @@ flask db history
 - `POST /api/v1/admin/timeslots` - 创建时间段
 - `PUT /api/v1/admin/timeslots/<id>` - 更新时间段
 - `DELETE /api/v1/admin/timeslots/<id>` - 删除时间段
+- `GET /api/v1/admin/statistics` - 获取统计数据（设备统计、预约统计、用户统计）
+
+### 审计日志接口
+
+#### 管理员（需要管理员权限）
+
+- `GET /api/v1/auditlogs/` - 获取审计日志列表（支持筛选：`operator_id`, `action_type`, `start_time`, `end_time`，支持分页）
+- `GET /api/v1/auditlogs/<id>` - 获取审计日志详情
 
 ### 请求认证
 
@@ -527,7 +583,11 @@ Authorization: Bearer <JWT_TOKEN>
 - `/equipment/:id` - 设备详情（需要登录）
 - `/reservations` - 预约管理（需要登录，管理员可审批）
 - `/laboratories` - 实验室管理（需要管理员权限）
+- `/statistics` - 数据统计（需要管理员权限）
+- `/auditlog` - 审计日志（需要管理员权限）
 - `/help` - 帮助中心
+- `/process` - 流程说明
+- `/rules` - 使用规则
 - `/*` - 404 页面（通配符路由）
 
 ### 路由保护
@@ -542,9 +602,26 @@ Authorization: Bearer <JWT_TOKEN>
 - **预约表**: `equip_id`, `student_id`, `teacher_id`, `status`, `apply_time`, 复合索引 `(equip_id, status)`
 - **学生表**: `lab_id`, `t_id`, 复合索引 `(lab_id, t_id)`
 - **教师表**: `lab_id`
-- **管理员表**: `lab_id`
+- **管理员表**: `manage_scope`（外键，关联实验室ID）
 - **时间段表**: `equip_id`, `is_active`, 复合索引 `(equip_id, is_active)`
 - **审计日志表**: `operator_id`, `action_time`, `action_type`, 复合索引 `(operator_id, action_time)`
+
+## 防超卖机制
+
+系统采用**乐观并发控制**机制防止预约超卖：
+
+1. **时间段验证**: 创建预约时验证预约时间是否在设备的激活时间段内
+2. **冲突检测**: 查询同一设备上状态为待审(0)或已通过(1)的预约，检查时间是否重叠
+3. **冲突算法**: 使用 `max(start1, start2) < min(end1, end2)` 判断时间重叠
+4. **事务保证**: 在数据库事务中完成冲突检测和预约创建，确保数据一致性
+
+## 状态同步机制
+
+当管理员审批通过预约或用户取消已通过的预约后，系统会自动更新设备的 `next_avail_time` 冗余字段：
+
+1. **触发时机**: 预约状态从待审批(0)变为已通过(1)，或从已通过(1)变为已取消(3)
+2. **计算算法**: 查找未来30天内第一个没有被已通过预约占用的时间段
+3. **缓存同步**: 更新后自动清除设备相关缓存，确保前端显示最新状态
 
 ## 常见问题
 
@@ -587,9 +664,12 @@ Authorization: Bearer <JWT_TOKEN>
 - [x] 时间段管理（创建、查询、更新、删除、可用时间段计算）
 - [x] 前端预约页面（预约列表、创建预约、审批管理）
 - [x] 管理员后台（实验室管理、设备管理、时间段管理、预约审批）
+- [x] 数据统计功能（设备统计、预约统计、用户统计、热门设备排行）
+- [x] 审计日志功能（自动记录、日志查询）
 - [x] 帮助中心页面
+- [x] 流程说明页面
+- [x] 使用规则页面
 - [x] 404 页面
-- [ ] 审计日志
 
 ## 许可证
 
