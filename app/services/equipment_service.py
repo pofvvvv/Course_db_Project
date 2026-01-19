@@ -8,20 +8,24 @@ from app.models.laboratory import Laboratory
 from app.utils.exceptions import NotFoundError, ValidationError
 
 
-def get_equipment_list(lab_id=None, keyword=None, category=None, status=None):
+def get_equipment_list(lab_id=None, keyword=None, category=None, status=None, page=1, page_size=10):
     """
-    查询设备列表（支持筛选）
+    查询设备列表（支持筛选和分页）
     
     Args:
         lab_id: 实验室ID筛选
         keyword: 关键词搜索（设备名称）
         category: 设备类别筛选
         status: 设备状态筛选
+        page: 页码（从1开始）
+        page_size: 每页数量
     
     Returns:
-        list: 设备列表
+        tuple: (设备列表, 总数)
     """
-    query = Equipment.query
+    from sqlalchemy.orm import joinedload
+    
+    query = Equipment.query.options(joinedload(Equipment.laboratory))
     
     # 按实验室ID筛选
     if lab_id is not None:
@@ -43,7 +47,14 @@ def get_equipment_list(lab_id=None, keyword=None, category=None, status=None):
     # 按ID排序
     query = query.order_by(Equipment.id)
     
-    return query.all()
+    # 获取总数（在分页之前）
+    total = query.count()
+    
+    # 分页查询
+    offset = (page - 1) * page_size
+    items = query.offset(offset).limit(page_size).all()
+    
+    return items, total
 
 
 def get_equipment_by_id(equip_id):
@@ -59,7 +70,9 @@ def get_equipment_by_id(equip_id):
     Raises:
         NotFoundError: 设备不存在
     """
-    equipment = Equipment.query.get(equip_id)
+    from sqlalchemy.orm import joinedload
+    
+    equipment = Equipment.query.options(joinedload(Equipment.laboratory)).get(equip_id)
     if not equipment:
         raise NotFoundError('设备不存在')
     return equipment

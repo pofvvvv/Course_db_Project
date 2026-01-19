@@ -1,18 +1,32 @@
 /* 全局样式 - 可爱活泼风格 */
 
 :root {
-  /* 活泼的渐变色主题 */
-  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  --warning-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  /* 配色系统 */
+  --bg-main: #4e4e50;        /* 主背景 */
+  --bg-card: #FFFFFF;       /* 卡片背景 */
+  --border-light: #E4E7EC;   /* 边框 */
+
+  --text-primary: #1F2329;  /* 主文字 */
+  --text-secondary: #5F6B7A;/* 次文字 */
+  --text-muted: #8B949E;    /* 辅助文字 */
+
+  --gray-strong: #3A3F45;   /* 深灰（标题/重点） */
+  --gray-soft: #9AA0A6;     /* 浅灰 */
+
+  --accent: #424352;        /* 点缀蓝（按钮/高亮） */
+  
+  /* 渐变色主题（基于新配色） */
+  --primary-gradient: linear-gradient(135deg, #717174 0%, #adb0be 100%);
+  --secondary-gradient: linear-gradient(135deg, #d6d7db 0%, #5b5c66 100%);
+  --success-gradient: linear-gradient(135deg, #717174 0%, #9AA0A6 100%);
+  --warning-gradient: linear-gradient(135deg, #717174 0%, #fee140 100%);
   --danger-gradient: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
   
   /* 柔和阴影 */
-  --shadow-sm: 0 2px 8px rgba(102, 126, 234, 0.1);
-  --shadow-md: 0 4px 16px rgba(102, 126, 234, 0.15);
-  --shadow-lg: 0 8px 32px rgba(102, 126, 234, 0.2);
-  --shadow-xl: 0 16px 48px rgba(102, 126, 234, 0.25);
+  --shadow-sm: 0 2px 8px rgba(66, 67, 82, 0.1);
+  --shadow-md: 0 4px 16px rgba(66, 67, 82, 0.15);
+  --shadow-lg: 0 8px 32px rgba(66, 67, 82, 0.2);
+  --shadow-xl: 0 16px 48px rgba(66, 67, 82, 0.25);
   
   /* 圆角 */
   --radius-sm: 8px;
@@ -29,9 +43,10 @@ body {
   margin: 0;
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  background: var(--bg-main);
   background-attachment: fixed;
   min-height: 100vh;
+  color: var(--text-primary);
 }
 
 /* 可爱的动画效果 */
@@ -190,11 +205,11 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(102, 126, 234, 0.5);
+  background: rgba(66, 67, 82, 0.5);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(102, 126, 234, 0.7);
+  background: rgba(66, 67, 82, 0.7);
 }
 

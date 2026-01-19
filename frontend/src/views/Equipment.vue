@@ -147,7 +147,7 @@
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.page_size"
         :total="total"
-        :page-sizes="[10, 20, 50, 100]"
+        :page-sizes="[9, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
         class="pagination"
         @size-change="handleSizeChange"
@@ -282,7 +282,7 @@ const filterForm = reactive({
 // 分页
 const pagination = reactive({
   page: 1,
-  page_size: 10
+  page_size: 9
 })
 
 // 对话框

@@ -69,3 +69,19 @@ export function deleteEquipment(id) {
   })
 }
 
+/**
+ * 获取热门设备排行
+ * @param {string} timeRange - 时间范围：'week'（近一周）或 'month'（近一月）
+ * @param {number} limit - 返回数量限制（默认10）
+ */
+export function getTopEquipments(timeRange = 'week', limit = 10) {
+  return request({
+    url: '/equipments/top',
+    method: 'get',
+    params: {
+      time_range: timeRange,
+      limit
+    }
+  })
+}
+
