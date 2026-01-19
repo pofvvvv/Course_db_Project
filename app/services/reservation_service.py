@@ -65,8 +65,7 @@ def create_reservation(data, current_user):
         equip_name=equipment.name,
         price=data.get('price'),
         start_time=data.get('start_time'),
-        end_time=data.get('end_time'),
-        description=data.get('description')
+        end_time=data.get('end_time')
     )
     
     try:

@@ -15,7 +15,7 @@
 - **数据库迁移**: Flask-Migrate 4.0.5
 - **序列化**: Marshmallow 3.20.1 / Flask-Marshmallow 0.15.0
 - **API 文档**: Flasgger 0.9.7.1 (Swagger UI)
-- **数据库**: MySQL (TiDB Cloud Serverless)
+- **数据库**: MySQL 8.0+
 - **数据库驱动**: PyMySQL 1.1.0
 - **缓存**: Redis 5.0.1
 - **认证**: PyJWT 2.8.0 (JWT Token)
@@ -105,10 +105,10 @@
 - **用户认证**: JWT Token 认证、用户登录、权限管理
 - **实验室管理**: 实验室信息管理、实验室列表查询（带缓存）
 - **设备管理**: 设备信息管理、设备状态跟踪、读写分离（普通用户读，管理员写）
-- **预约管理**: 设备预约申请、预约审批、预约查询（待实现）
+- **预约管理**: 设备预约申请、预约审批、预约查询
 - **用户管理**: 学生、教师、管理员三种角色管理
-- **时间段管理**: 设备可用时间段配置（待实现）
-- **审计日志**: 操作记录追踪（待实现）
+- **时间段管理**: 设备可用时间段配置
+- **审计日志**: 操作记录追踪、管理员查看
 - **缓存机制**: Redis 缓存，提升 API 响应速度
 
 ### 用户角色
@@ -165,16 +165,16 @@ FLASK_PORT=5000
 # Flask 密钥（生产环境请务必修改）
 SECRET_KEY=your-secret-key-here
 
-# TiDB Cloud 数据库配置
-DB_USER=your_username
+# MySQL 数据库配置
+DB_USER=root
 DB_PASSWORD=your_password
-DB_HOST=your_tidb_host
-DB_PORT=4000
+DB_HOST=localhost
+DB_PORT=3306
 DB_NAME=instrument_booking
 
-# SSL 配置（TiDB Cloud 需要）
-SSL_VERIFY_CERT=True
-SSL_VERIFY_IDENTITY=True
+# SSL 配置（本地MySQL不需要）
+SSL_VERIFY_CERT=False
+SSL_VERIFY_IDENTITY=False
 
 # Redis 配置
 REDIS_HOST=localhost
@@ -197,7 +197,28 @@ flask run
 
 后端服务将在 `http://localhost:5000` 启动。
 
-#### 4. 访问 API 文档
+#### 4. 初始化数据库
+
+首次运行需要创建数据库和导入测试数据：
+
+```bash
+# 方法1: 使用SQL备份导入（推荐）
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS instrument_booking"
+mysql -u root -p instrument_booking < database_backup.sql
+
+# 方法2: 使用Python脚本初始化
+python init_data.py
+```
+
+#### 5. 测试账户
+
+| 用户类型 | 账号 | 密码 |
+|---------|------|------|
+| 管理员 | admin001, admin002 | 123456 |
+| 教师 | T001 - T005 | 123456 |
+| 学生 | S001 - S005 | 123456 |
+
+#### 6. 访问 API 文档
 
 启动应用后，访问 Swagger UI 文档：
 
@@ -252,7 +273,7 @@ npm run build
 | `DB_USER` | 数据库用户名 | root |
 | `DB_PASSWORD` | 数据库密码 | - |
 | `DB_HOST` | 数据库主机 | localhost |
-| `DB_PORT` | 数据库端口 | 4000 |
+| `DB_PORT` | 数据库端口 | 3306 |
 | `DB_NAME` | 数据库名称 | instrument_booking |
 | `SQLALCHEMY_DATABASE_URI` | 数据库连接 URI（可选，覆盖单独配置） | - |
 | `SQLALCHEMY_ECHO` | 是否打印 SQL 语句 | False |
@@ -429,6 +450,24 @@ flask db history
 Authorization: Bearer <JWT_TOKEN>
 ```
 
+### 预约接口
+
+- `POST /api/v1/reservations/` - 创建预约（需要登录）
+- `GET /api/v1/reservations/` - 获取我的预约列表（需要登录）
+- `GET /api/v1/reservations/<id>` - 获取预约详情（需要登录）
+- `PUT /api/v1/reservations/<id>/cancel` - 取消预约（需要登录）
+- `PUT /api/v1/admin/reservations/<id>/approve` - 审批通过（管理员）
+- `PUT /api/v1/admin/reservations/<id>/reject` - 审批拒绝（管理员）
+
+### 时间段接口
+
+- `GET /api/v1/timeslots/` - 获取时间段列表
+- `POST /api/v1/timeslots/` - 创建时间段（管理员）
+
+### 审计日志接口
+
+- `GET /api/v1/auditlogs/` - 获取审计日志列表（管理员）
+
 ### 更多接口
 
 完整 API 文档请查看 Swagger UI：`http://localhost:5000/apidocs`
@@ -438,8 +477,9 @@ Authorization: Bearer <JWT_TOKEN>
 - `/` 或 `/home` - 首页（含登录功能）
 - `/equipment` - 设备列表（需要登录）
 - `/equipment/:id` - 设备详情（需要登录）
-- `/reservations` - 预约管理（待实现）
-- `/help` - 帮助中心（待实现）
+- `/reservations` - 我的预约
+- `/auditlog` - 审计日志（管理员）
+- `/help` - 帮助中心
 
 ### 路由保护
 
@@ -494,11 +534,11 @@ Authorization: Bearer <JWT_TOKEN>
 - [x] 设备管理（读写分离）
 - [x] Redis 缓存
 - [x] 数据库索引优化
-- [ ] 预约管理功能
-- [ ] 时间段管理
-- [ ] 审计日志
-- [ ] 前端预约页面
-- [ ] 管理员后台
+- [x] 预约管理功能
+- [x] 时间段管理
+- [x] 审计日志
+- [x] 前端预约页面
+- [ ] 管理员后台完善
 
 ## 许可证
 

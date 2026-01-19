@@ -28,7 +28,7 @@
                 <h3>用户登录</h3>
               </div>
             </template>
-            <el-tabs v-model="activeRole" class="role-tabs">
+            <el-tabs v-model="activeRole" class="role-tabs" @tab-change="handleTabChange">
               <el-tab-pane label="学生" name="student">
                 <el-icon><User /></el-icon>
               </el-tab-pane>
@@ -316,12 +316,16 @@ const handleLogin = async () => {
     return
   }
   
+  // 确保获取当前选中的用户类型
+  const userType = activeRole.value
+  console.log('[DEBUG] 登录用户类型:', userType, '用户名:', loginForm.value.username)
+  
   loading.value = true
   try {
     const result = await userStore.login(
       loginForm.value.username,
       loginForm.value.password,
-      activeRole.value
+      userType
     )
     
     if (result.success) {
@@ -369,6 +373,12 @@ const handleMoreAnnouncements = () => {
 // 处理公告点击
 const handleAnnouncementClick = (announcement) => {
   ElMessage.info(`查看公告：${announcement.title}`)
+}
+
+// 处理tab切换
+const handleTabChange = (tabName) => {
+  console.log('[DEBUG] Tab切换到:', tabName)
+  activeRole.value = tabName
 }
 
 // 获取排名样式类

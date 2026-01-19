@@ -15,6 +15,7 @@ from app.utils.response import success, fail
 from app.utils.exceptions import NotFoundError, ValidationError
 from app.utils.auth import admin_required
 from app.utils.redis_client import redis_client
+from app.utils.audit import audit_log, set_audit_params, AuditActionType
 from app.services import timeslot_service
 from app.models.timeslot import TimeSlot
 
@@ -32,6 +33,7 @@ timeslot_update_schema = TimeSlotUpdateSchema()
 
 @admin_bp.route('/equipments', methods=['POST'])
 @admin_required
+@audit_log(AuditActionType.CREATE_EQUIPMENT, '创建设备: {name}')
 @swag_from({
     'tags': ['ç®¡çåè®¾å¤ç®¡ç'],
     'summary': 'æ°å¢è®¾å¤',
@@ -109,6 +111,7 @@ def create_equipment():
 
 @admin_bp.route('/equipments/<int:equip_id>', methods=['PUT'])
 @admin_required
+@audit_log(AuditActionType.UPDATE_EQUIPMENT, '更新设备: {name}')
 @swag_from({
     'tags': ['ç®¡çåè®¾å¤ç®¡ç'],
     'summary': 'ä¿®æ¹è®¾å¤ä¿¡æ¯',
@@ -171,25 +174,29 @@ def update_equipment(equip_id):
         
         validated_data = equipment_update_schema.load(json_data)
         
-        # æ´æ°è®¾å¤
+        # æ´æ–°è®¾å¤‡
         equipment = equipment_service.update_equipment(equip_id, validated_data)
         
-        # æ¸é¤ç¸å³ç¼å­
+        # æ¸…é™¤ç¸å…³ç¼“å­˜
         _clear_equipment_cache(equip_id=equip_id)
         
-        # åºååè¿å
+        # 设置审计参数
+        set_audit_params(name=equipment.name, equip_id=equip_id)
+        
+        # åºåˆ—åŒ–è¿”å›ž
         data = equipment_schema.dump(equipment)
-        return success(data=data, msg='æ´æ°æå')
+        return success(data=data, msg='æ´æ–°æˆåŠŸ')
     except NotFoundError as e:
         return fail(code=404, msg=e.message)
     except ValidationError as e:
         return fail(code=422, msg=e.message, data=e.payload)
     except Exception as e:
-        return fail(code=500, msg=f'æ´æ°å¤±è´¥: {str(e)}')
+        return fail(code=500, msg=f'æ´æ–°å¤±è´¥: {str(e)}')
 
 
 @admin_bp.route('/equipments/<int:equip_id>', methods=['DELETE'])
 @admin_required
+@audit_log(AuditActionType.DELETE_EQUIPMENT, '删除设备ID: {equip_id}')
 @swag_from({
     'tags': ['ç®¡çåè®¾å¤ç®¡ç'],
     'summary': 'å é¤è®¾å¤',
@@ -227,12 +234,19 @@ def update_equipment(equip_id):
 def delete_equipment(equip_id):
     """ç®¡çåå é¤è®¾å¤"""
     try:
+        # 获取设备信息用于审计日志
+        equipment = equipment_service.get_equipment_by_id(equip_id)
+        
+        # 删除设备
         equipment_service.delete_equipment(equip_id)
         
-        # æ¸é¤ç¸å³ç¼å­
+        # 设置审计参数
+        set_audit_params(equip_id=equip_id, name=equipment.name)
+        
+        # æ¸…é™¤ç¸å…³ç¼“å­˜
         _clear_equipment_cache(equip_id=equip_id)
         
-        return success(msg='å é¤æå')
+        return success(msg='å é¤æåŠŸ')
     except NotFoundError as e:
         return fail(code=404, msg=e.message)
     except ValidationError as e:
@@ -243,6 +257,7 @@ def delete_equipment(equip_id):
 
 @admin_bp.route('/timeslots', methods=['POST'])
 @admin_required
+@audit_log(AuditActionType.CREATE_TIMESLOT, '创建时间段: 设备ID {equip_id}')
 @swag_from({
     'tags': ['ç®¡çåæ¶é´æ®µç®¡ç'],
     'summary': 'åå»ºæ¶é´æ®µ',
@@ -281,6 +296,9 @@ def create_timeslot():
 
         validated_data = timeslot_create_schema.load(json_data)
         slot = timeslot_service.create_timeslot(validated_data)
+        
+        # 设置审计参数
+        set_audit_params(equip_id=slot.equip_id, start_time=slot.start_time, end_time=slot.end_time)
 
         _clear_timeslot_cache(slot.equip_id)
 
@@ -296,6 +314,7 @@ def create_timeslot():
 
 @admin_bp.route('/timeslots/<int:slot_id>', methods=['PUT'])
 @admin_required
+@audit_log(AuditActionType.UPDATE_TIMESLOT, '更新时间段ID: {slot_id}')
 @swag_from({
     'tags': ['ç®¡çåæ¶é´æ®µç®¡ç'],
     'summary': 'æ´æ°æ¶é´æ®µ',
@@ -347,6 +366,9 @@ def update_timeslot(slot_id):
         old_equip_id = old_slot.equip_id if old_slot else None
 
         slot = timeslot_service.update_timeslot(slot_id, validated_data)
+        
+        # 设置审计参数
+        set_audit_params(slot_id=slot_id, equip_id=slot.equip_id)
 
         _clear_timeslot_cache(slot.equip_id)
         if old_equip_id and old_equip_id != slot.equip_id:
@@ -364,6 +386,7 @@ def update_timeslot(slot_id):
 
 @admin_bp.route('/timeslots/<int:slot_id>', methods=['DELETE'])
 @admin_required
+@audit_log(AuditActionType.DELETE_TIMESLOT, '删除时间段ID: {slot_id}')
 @swag_from({
     'tags': ['ç®¡çåæ¶é´æ®µç®¡ç'],
     'summary': 'å é¤æ¶é´æ®µ',
@@ -386,6 +409,10 @@ def delete_timeslot(slot_id):
     """ç®¡çåå é¤æ¶é´æ®µ"""
     try:
         equip_id = timeslot_service.delete_timeslot(slot_id)
+        
+        # 设置审计参数
+        set_audit_params(slot_id=slot_id, equip_id=equip_id)
+        
         _clear_timeslot_cache(equip_id)
         return success(msg='å é¤æå')
     except NotFoundError as e:

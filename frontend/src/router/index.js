@@ -32,6 +32,12 @@ const routes = [
     component: () => import('@/views/Reservations.vue'),
     meta: { title: '预约管理' }
   },
+  {
+    path: '/audit-logs',
+    name: 'AuditLog',
+    component: () => import('@/views/AuditLog.vue'),
+    meta: { title: '审计日志', requiresAuth: true, requiresAdmin: true }
+  },
 
   // --- 以下是模块6需要插入的部分 ---
   {
@@ -66,6 +72,9 @@ router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   if (to.meta.requiresAuth && !userStore.isLoggedIn) {
     // 需要登录但未登录，跳转到首页
+    next('/')
+  } else if (to.meta.requiresAdmin && !userStore.isAdmin) {
+    // 需要管理员权限但不是管理员，跳转到首页
     next('/')
   } else {
     next()

@@ -32,26 +32,11 @@ class Config:
         f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4'
     )
     
-    # TiDB Cloud SSL 连接配置
-    # 构建 SSL 配置
-    _ssl_verify_cert = os.getenv('SSL_VERIFY_CERT', 'True').lower() == 'true'
-    _connect_args = {}
-    if _ssl_verify_cert:
-        _ssl_config = {
-            'ssl_verify_cert': True,
-            'ssl_verify_identity': os.getenv('SSL_VERIFY_IDENTITY', 'True').lower() == 'true'
-        }
-        # 如果提供了 SSL CA 证书路径，则添加
-        _ssl_ca = os.getenv('SSL_CA', None)
-        if _ssl_ca:
-            _ssl_config['ssl_ca'] = _ssl_ca
-        _connect_args['ssl'] = _ssl_config
-    
+    # SSL 连接配置（本地MySQL不需要SSL）
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 10,
         'pool_recycle': 3600,
-        'pool_pre_ping': True,
-        'connect_args': _connect_args
+        'pool_pre_ping': True
     }
     
     # Flask-Migrate 配置

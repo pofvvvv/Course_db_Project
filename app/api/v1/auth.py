@@ -8,6 +8,7 @@ from werkzeug.security import check_password_hash
 from app.utils.auth import generate_token, get_user_by_id
 from app.utils.response import success, fail
 from app.utils.exceptions import UnauthorizedError, ValidationError
+from app.utils.audit import audit_login
 
 # 创建蓝图
 auth_bp = Blueprint('auth', __name__)
@@ -130,12 +131,18 @@ def login():
             if user_type == 'student' and hasattr(user, 't_id'):
                 user_data['t_id'] = user.t_id
         
+        # 记录登录成功日志
+        audit_login(username, user_type, success=True)
+        
         return success(data={
             'token': token,
             'user': user_data
         }, msg='登录成功')
         
     except (UnauthorizedError, ValidationError) as e:
+        # 记录登录失败日志
+        if username:
+            audit_login(username, user_type or 'unknown', success=False)
         return fail(code=e.status_code, msg=e.message)
     except Exception as e:
         return fail(code=500, msg=f'登录失败: {str(e)}')
