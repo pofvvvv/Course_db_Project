@@ -15,6 +15,7 @@ from app.api.v1.schemas.reservation_schema import ReservationSchema
 from app.utils.response import success, fail
 from app.utils.exceptions import NotFoundError, ValidationError
 from app.utils.auth import admin_required, get_current_user
+from app.utils.audit import audit_log
 from app.utils.redis_client import redis_client
 from app.services import timeslot_service, reservation_service, statistics_service
 from app.models.timeslot import TimeSlot
@@ -33,6 +34,7 @@ timeslot_update_schema = TimeSlotUpdateSchema()
 
 @admin_bp.route('/equipments', methods=['POST'])
 @admin_required
+@audit_log('create_equipment', detail_func=lambda f, *a, **k: request.get_json())
 @swag_from({
     'tags': ['ç®¡çåè®¾å¤ç®¡ç'],
     'summary': 'æ°å¢è®¾å¤',
@@ -110,6 +112,7 @@ def create_equipment():
 
 @admin_bp.route('/equipments/<int:equip_id>', methods=['PUT'])
 @admin_required
+@audit_log('update_equipment', detail_func=lambda f, equip_id, *a, **k: {'equip_id': equip_id, 'data': request.get_json()})
 @swag_from({
     'tags': ['ç®¡çåè®¾å¤ç®¡ç'],
     'summary': 'ä¿®æ¹è®¾å¤ä¿¡æ¯',
@@ -191,6 +194,7 @@ def update_equipment(equip_id):
 
 @admin_bp.route('/equipments/<int:equip_id>', methods=['DELETE'])
 @admin_required
+@audit_log('delete_equipment', detail_func=lambda f, equip_id, *a, **k: {'equip_id': equip_id})
 @swag_from({
     'tags': ['ç®¡çåè®¾å¤ç®¡ç'],
     'summary': 'å é¤è®¾å¤',
@@ -244,6 +248,7 @@ def delete_equipment(equip_id):
 
 @admin_bp.route('/timeslots', methods=['POST'])
 @admin_required
+@audit_log('create_timeslot', detail_func=lambda f, *a, **k: request.get_json())
 @swag_from({
     'tags': ['ç®¡çåæ¶é´æ®µç®¡ç'],
     'summary': 'åå»ºæ¶é´æ®µ',
@@ -297,6 +302,7 @@ def create_timeslot():
 
 @admin_bp.route('/timeslots/<int:slot_id>', methods=['PUT'])
 @admin_required
+@audit_log('update_timeslot', detail_func=lambda f, slot_id, *a, **k: {'slot_id': slot_id, 'data': request.get_json()})
 @swag_from({
     'tags': ['ç®¡çåæ¶é´æ®µç®¡ç'],
     'summary': 'æ´æ°æ¶é´æ®µ',
@@ -365,6 +371,7 @@ def update_timeslot(slot_id):
 
 @admin_bp.route('/timeslots/<int:slot_id>', methods=['DELETE'])
 @admin_required
+@audit_log('delete_timeslot', detail_func=lambda f, slot_id, *a, **k: {'slot_id': slot_id})
 @swag_from({
     'tags': ['ç®¡çåæ¶é´æ®µç®¡ç'],
     'summary': 'å é¤æ¶é´æ®µ',
@@ -421,6 +428,7 @@ def _clear_timeslot_cache(equip_id):
 
 @admin_bp.route('/reservations/<int:reservation_id>/approve', methods=['PUT'])
 @admin_required
+@audit_log('approve_reservation', detail_func=lambda f, reservation_id, *a, **k: {'reservation_id': reservation_id})
 @swag_from({
     'tags': ['管理员预约审批'],
     'summary': '审批通过预约',
@@ -482,6 +490,7 @@ def approve_reservation(reservation_id):
 
 @admin_bp.route('/reservations/<int:reservation_id>/reject', methods=['PUT'])
 @admin_required
+@audit_log('reject_reservation', detail_func=lambda f, reservation_id, *a, **k: {'reservation_id': reservation_id, 'reason': request.get_json().get('reason') if request.get_json() else None})
 @swag_from({
     'tags': ['管理员预约审批'],
     'summary': '审批拒绝预约',

@@ -53,6 +53,14 @@
                 <el-icon><DataAnalysis /></el-icon>
                 <span>数据统计</span>
               </el-menu-item>
+              <el-menu-item 
+                v-if="userStore.isAdmin" 
+                index="/auditlog" 
+                class="menu-item"
+              >
+                <el-icon><Document /></el-icon>
+                <span>审计日志</span>
+              </el-menu-item>
               <el-menu-item index="/help" class="menu-item">
                 <el-icon><QuestionFilled /></el-icon>
                 <span>帮助中心</span>

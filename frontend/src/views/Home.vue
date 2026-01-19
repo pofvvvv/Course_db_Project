@@ -197,25 +197,13 @@
           </div>
           <div class="footer-section">
             <h4>联系方式</h4>
-            <p>电话：010-12345678</p>
-            <p>邮箱：support@university.edu.cn</p>
-            <p>地址：XX大学XX校区XX楼</p>
-          </div>
-          <div class="footer-section">
-            <h4>技术支持</h4>
-            <p>
-              <el-link type="primary" :underline="false">使用帮助</el-link>
-            </p>
-            <p>
-              <el-link type="primary" :underline="false">常见问题</el-link>
-            </p>
-            <p>
-              <el-link type="primary" :underline="false">意见反馈</el-link>
-            </p>
+            <p>电话：9999999999</p>
+            <p>邮箱：9999999999@qq.com</p>
+            <p>地址：湖南省长沙市岳麓区天马三区十</p>
           </div>
         </div>
         <div class="footer-bottom">
-          <p>&copy; 2024 高校大型仪器设备共享服务平台. 保留所有权利.</p>
+          <p>&copy; 2026 高校大型仪器设备共享服务平台. 保留所有权利.</p>
         </div>
       </div>
     </footer>
@@ -814,7 +802,7 @@ const handleAnnouncementClick = (announcement) => {
 
   .footer-content {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 40px;
     margin-bottom: 40px;
 

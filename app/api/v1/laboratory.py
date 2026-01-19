@@ -24,11 +24,10 @@ lab_update_schema = LaboratoryUpdateSchema()
 
 
 @lab_bp.route('/', methods=['GET'])
-@admin_required
 @swag_from({
     'tags': ['实验室管理'],
     'summary': '获取实验室列表',
-    'description': '获取所有实验室的列表（需要管理员权限）',
+    'description': '获取所有实验室的列表',
     'security': [{'Bearer': []}],
     'responses': {
         200: {

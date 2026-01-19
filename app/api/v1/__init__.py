@@ -28,7 +28,7 @@ from flask import Blueprint
 api_v1 = Blueprint('api_v1', __name__)
 
 # 导入并注册路由蓝图     
-from app.api.v1 import laboratory, auth, users, equipment, admin, timeslot, reservation
+from app.api.v1 import laboratory, auth, users, equipment, admin, timeslot, reservation, auditlog
 
 # 注册路由蓝图
 api_v1.register_blueprint(laboratory.lab_bp, url_prefix='/laboratories')
@@ -38,6 +38,7 @@ api_v1.register_blueprint(equipment.equipment_bp, url_prefix='/equipments')
 api_v1.register_blueprint(admin.admin_bp, url_prefix='/admin')
 api_v1.register_blueprint(timeslot.timeslot_bp, url_prefix='/timeslots')
 api_v1.register_blueprint(reservation.reservation_bp, url_prefix='/reservations')
+api_v1.register_blueprint(auditlog.auditlog_bp, url_prefix='/auditlogs')
 
 
 @api_v1.route('/health', methods=['GET'])

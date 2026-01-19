@@ -21,6 +21,12 @@ const routes = [
     meta: { title: '数据统计', requiresAuth: true, requiresAdmin: true }
   },
   {
+    path: '/auditlog',
+    name: 'AuditLog',
+    component: () => import('@/views/AuditLog.vue'),
+    meta: { title: '审计日志', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/equipment',
     name: 'Equipment',
     component: () => import('@/views/Equipment.vue'),

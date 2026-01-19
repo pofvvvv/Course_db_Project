@@ -123,8 +123,10 @@ def seed_data(equipments, users, password):
     生成并插入测试数据
     
     生成指定数量的设备和用户数据：
-    - 设备数据：随机生成设备名称、实验室、类别、状态等
+    - 设备数据：随机生成设备名称、实验室、类别、状态等，并自动为每个设备生成时间段
     - 用户数据：随机生成学生和教师（比例约 8:2）
+    
+    注意：每个设备会自动生成三个时间段（09:00-12:00、14:00-17:00 和 19:00-22:00）
     """
     try:
         click.echo(f'开始生成测试数据...')
@@ -135,7 +137,7 @@ def seed_data(equipments, users, password):
         password_hash = generate_password_hash(password)
         
         # 1. 确保有足够的实验室数据
-        click.echo('\n[1/3] 检查实验室数据...')
+        click.echo('\n[1/4] 检查实验室数据...')
         existing_labs = Laboratory.query.all()
         lab_count = len(existing_labs)
         
@@ -144,8 +146,8 @@ def seed_data(equipments, users, password):
             for i in range(lab_count + 1, 11):
                 lab = Laboratory(
                     id=i,
-                    name=f'实验室L{i}',
-                    location=f'地点{i}'
+                    name=f'L{i}',
+                    location=f'实验室L{i}'
                 )
                 db.session.add(lab)
             db.session.commit()
@@ -157,8 +159,11 @@ def seed_data(equipments, users, password):
         all_labs = Laboratory.query.all()
         lab_ids = [lab.id for lab in all_labs]
         
-        # 2. 生成设备数据
-        click.echo(f'\n[2/3] 生成 {equipments} 条设备数据...')
+        # 记录生成前的设备数量，用于后续更新
+        equipment_start_id = Equipment.query.count()
+        
+        # 2. 生成设备数据（包含时间段）
+        click.echo(f'\n[2/4] 生成 {equipments} 条设备数据（含时间段）...')
         
         # 设备名称前缀列表
         equipment_prefixes = [
@@ -174,8 +179,12 @@ def seed_data(equipments, users, password):
         
         equipment_suffixes = ['-A', '-B', '-C', '-Pro', '-Plus', '-Max', '-Ultra', '-Elite']
         
-        existing_equipment_count = Equipment.query.count()
-        equipment_batch = []
+        # 默认时间段配置
+        default_slots = [
+            {'start_time': '09:00:00', 'end_time': '12:00:00', 'is_active': 1},
+            {'start_time': '14:00:00', 'end_time': '17:00:00', 'is_active': 1},
+            {'start_time': '19:00:00', 'end_time': '22:00:00', 'is_active': 1},
+        ]
         
         for i in range(equipments):
             # 生成设备名称
@@ -184,8 +193,8 @@ def seed_data(equipments, users, password):
             number = random.randint(1, 999)
             name = f'{prefix}{suffix}-{number:03d}'
             
-            # 随机分配实验室（30%概率为None，表示学院设备）
-            lab_id = random.choice(lab_ids + [None] * 3) if random.random() < 0.7 else None
+            # 随机分配实验室（70%概率有实验室，30%概率为None，表示学院设备）
+            lab_id = random.choice(lab_ids) if random.random() < 0.7 else None
             
             # 随机类别（1:学院, 2:实验室）
             category = 1 if lab_id is None else random.choice([1, 2])
@@ -194,6 +203,7 @@ def seed_data(equipments, users, password):
             status_weights = [0.05, 0.70, 0.15, 0.10]
             status = random.choices([0, 1, 2, 3], weights=status_weights)[0]
             
+            # 创建设备
             equipment = Equipment(
                 name=name,
                 lab_id=lab_id,
@@ -201,25 +211,50 @@ def seed_data(equipments, users, password):
                 status=status,
                 next_avail_time=None
             )
-            equipment_batch.append(equipment)
+            db.session.add(equipment)
+            db.session.flush()  # 刷新以获取设备ID，但不提交
             
-            # 批量插入，每100条提交一次
-            if len(equipment_batch) >= 100:
-                db.session.bulk_save_objects(equipment_batch)
+            # 为该设备生成时间段
+            for slot_data in default_slots:
+                slot = TimeSlot(
+                    equip_id=equipment.id,
+                    start_time=time.fromisoformat(slot_data['start_time']),
+                    end_time=time.fromisoformat(slot_data['end_time']),
+                    is_active=slot_data['is_active']
+                )
+                db.session.add(slot)
+            
+            # 每100条提交一次
+            if (i + 1) % 100 == 0:
                 db.session.commit()
-                equipment_batch = []
-                click.echo(f'  已生成 {i + 1}/{equipments} 条设备数据...', nl=False)
+                click.echo(f'  已生成 {i + 1}/{equipments} 条设备数据（含时间段）...', nl=False)
                 click.echo('\r', nl=False)
         
-        # 插入剩余设备
-        if equipment_batch:
-            db.session.bulk_save_objects(equipment_batch)
-            db.session.commit()
+        # 提交剩余数据
+        db.session.commit()
         
-        click.echo(f'\r  [OK] 设备数据生成完成（共 {equipments} 条）')
+        click.echo(f'\r  [OK] 设备数据生成完成（共 {equipments} 条，已包含时间段）')
+        
+        # 更新新生成设备的下次可用时间
+        click.echo('  正在更新设备的下次可用时间...')
+        try:
+            from app.services.reservation_service import _update_equipment_next_avail_time
+            # 只更新新生成的设备
+            new_equipments = Equipment.query.filter(Equipment.id > equipment_start_id).all()
+            updated_count = 0
+            for equipment in new_equipments:
+                try:
+                    _update_equipment_next_avail_time(equipment.id)
+                    updated_count += 1
+                except Exception:
+                    # 忽略单个设备的更新失败
+                    pass
+            click.echo(f'  [OK] 已更新 {updated_count} 个设备的下次可用时间')
+        except Exception as e:
+            click.echo(f'  [WARN] 更新下次可用时间时出错: {str(e)}')
         
         # 3. 生成用户数据（学生和教师）
-        click.echo(f'\n[3/3] 生成 {users} 条用户数据...')
+        click.echo(f'\n[3/4] 生成 {users} 条用户数据...')
         
         # 学生和教师的比例（约 8:2）
         student_count = int(users * 0.8)
@@ -291,7 +326,8 @@ def seed_data(equipments, users, password):
             
             # 70%的学生有实验室，30%没有
             lab_id = random.choice(lab_ids) if random.random() < 0.7 else None
-            lab_name = Laboratory.query.get(lab_id).name if lab_id else None
+            lab = Laboratory.query.get(lab_id) if lab_id else None
+            lab_name = lab.name if lab else None
             
             # 60%的学生有导师
             t_id = random.choice(teacher_ids) if random.random() < 0.6 and teacher_ids else None
@@ -342,11 +378,14 @@ def seed_data(equipments, users, password):
 @with_appcontext
 def seed_timeslots(equipments):
     """
-    为设备生成时间段数据
+    为已有设备生成时间段数据（补充命令）
+    
+    注意：seed-data 命令已自动为设备生成时间段，此命令仅用于为已有设备补充时间段。
     
     为指定数量的设备（或所有设备）生成默认的时间段配置：
-    - 工作日：09:00-12:00, 14:00-17:00
-    - 周末：09:00-12:00
+    - 09:00-12:00
+    - 14:00-17:00
+    - 19:00-22:00
     """
     try:
         click.echo('开始为设备生成时间段数据...')
@@ -367,6 +406,7 @@ def seed_timeslots(equipments):
         default_slots = [
             {'start_time': '09:00:00', 'end_time': '12:00:00', 'is_active': 1},
             {'start_time': '14:00:00', 'end_time': '17:00:00', 'is_active': 1},
+            {'start_time': '19:00:00', 'end_time': '22:00:00', 'is_active': 1},
         ]
         
         created_count = 0
@@ -431,9 +471,84 @@ def seed_timeslots(equipments):
         raise click.Abort()
 
 
+@click.command('clear-equipments')
+@click.option('--confirm', is_flag=True, help='确认删除（必须提供此选项才会执行删除）')
+@with_appcontext
+def clear_equipments(confirm):
+    """
+    清空设备表的所有数据
+    
+    注意：此操作会删除所有设备、时间段和预约记录，且无法恢复！
+    必须使用 --confirm 选项才会执行删除操作。
+    """
+    if not confirm:
+        click.echo('[ERROR] 必须使用 --confirm 选项才能执行删除操作', err=True)
+        click.echo('示例: flask clear-equipments --confirm')
+        return
+    
+    try:
+        from app.models.reservation import Reservation
+        from app.models.timeslot import TimeSlot
+        
+        # 统计数据
+        reservation_count = Reservation.query.count()
+        equipment_count = Equipment.query.count()
+        timeslot_count = TimeSlot.query.count()
+        
+        click.echo(f'\n准备删除以下数据：')
+        click.echo(f'  预约记录: {reservation_count} 条')
+        click.echo(f'  设备: {equipment_count} 个')
+        click.echo(f'  时间段: {timeslot_count} 个')
+        
+        # 确认删除
+        if not click.confirm('\n确定要删除所有设备数据吗？此操作无法恢复！'):
+            click.echo('操作已取消')
+            return
+        
+        # 删除预约记录
+        if reservation_count > 0:
+            click.echo(f'\n正在删除 {reservation_count} 条预约记录...')
+            Reservation.query.delete()
+            db.session.commit()
+            click.echo('  [OK] 预约记录已删除')
+        
+        # 删除时间段（虽然会自动级联删除，但为了确保可以手动删除）
+        if timeslot_count > 0:
+            click.echo(f'正在删除 {timeslot_count} 个时间段...')
+            TimeSlot.query.delete()
+            db.session.commit()
+            click.echo('  [OK] 时间段已删除')
+        
+        # 删除设备
+        if equipment_count > 0:
+            click.echo(f'正在删除 {equipment_count} 个设备...')
+            Equipment.query.delete()
+            db.session.commit()
+            click.echo('  [OK] 设备已删除')
+        
+        # 验证删除结果
+        remaining_equipment = Equipment.query.count()
+        remaining_timeslot = TimeSlot.query.count()
+        remaining_reservation = Reservation.query.count()
+        
+        click.echo(f'\n[OK] 删除完成！')
+        click.echo(f'\n剩余数据统计：')
+        click.echo(f'  设备: {remaining_equipment} 个')
+        click.echo(f'  时间段: {remaining_timeslot} 个')
+        click.echo(f'  预约记录: {remaining_reservation} 条')
+        
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f'\n[ERROR] 删除失败: {str(e)}', err=True)
+        import traceback
+        traceback.print_exc()
+        raise click.Abort()
+
+
 def register_commands(app):
     """注册CLI命令到Flask应用"""
     app.cli.add_command(init_users)
     app.cli.add_command(seed_data)
     app.cli.add_command(seed_timeslots)
+    app.cli.add_command(clear_equipments)
 
