@@ -1,6 +1,7 @@
 """
 时间段模型
 """
+from sqlalchemy import BigInteger, Integer
 from app import db
 from app.models.mixins import ToDictMixin
 
@@ -9,7 +10,8 @@ class TimeSlot(db.Model, ToDictMixin):
     """时间段表"""
     __tablename__ = 'timeslot'
     
-    slot_id = db.Column(db.BigInteger, primary_key=True, comment='时间段ID')
+    # 使用 with_variant 让 SQLite 使用 Integer（支持自动递增），其他数据库使用 BigInteger
+    slot_id = db.Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True, autoincrement=True, comment='时间段ID')
     equip_id = db.Column(db.BigInteger, db.ForeignKey('equipment.id'), nullable=False, comment='设备ID')
     start_time = db.Column(db.Time, nullable=False, comment='开始时间')
     end_time = db.Column(db.Time, nullable=False, comment='结束时间')

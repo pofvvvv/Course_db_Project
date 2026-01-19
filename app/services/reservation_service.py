@@ -72,10 +72,24 @@ def _check_timeslot_availability(equip_id, start_time, end_time):
     found_valid_slot = False
     for slot in time_slots:
         # 检查预约的开始时间和结束时间是否都在该时间段内
-        if slot.start_time <= start_time_only < slot.end_time and \
-           slot.start_time < end_time_only <= slot.end_time:
-            found_valid_slot = True
-            break
+        # 修复：允许开始时间等于 slot.start_time，结束时间等于 slot.end_time（边界情况）
+        # 同时处理秒和微秒的差异：如果结束时间只差几秒/微秒（小时和分钟相同），也认为是边界情况
+        if slot.start_time <= start_time_only < slot.end_time:
+            # 检查结束时间：允许等于 slot.end_time，或者只差几秒/微秒（边界情况）
+            # 情况1：正常情况，结束时间在时间段内
+            normal_case = slot.start_time < end_time_only <= slot.end_time
+            # 情况2：边界情况，结束时间正好等于 slot.end_time
+            exact_boundary = end_time_only == slot.end_time
+            # 情况3：边界情况，结束时间超过 slot.end_time 但小时和分钟相同（只有秒/微秒不同）
+            near_boundary = (end_time_only > slot.end_time and 
+                            end_time_only.hour == slot.end_time.hour and 
+                            end_time_only.minute == slot.end_time.minute)
+            
+            end_time_match = normal_case or exact_boundary or near_boundary
+            
+            if end_time_match:
+                found_valid_slot = True
+                break
     
     if not found_valid_slot:
         raise ValidationError(
@@ -152,6 +166,29 @@ def create_reservation(data, current_user):
     if not equipment:
         raise ValidationError('设备不存在', payload={'field': 'equip_id'})
     
+    # 先检查用户类型（在检查时间段之前，确保错误消息正确）
+    user_id = current_user['user_id']
+    user_type = current_user['user_type']
+    
+    # 填充冗余字段
+    user_name = None
+    if user_type == 'student':
+        student = Student.query.get(user_id)
+        if not student:
+            raise ValidationError('学生不存在')
+        user_name = student.name
+        data['student_id'] = user_id
+        data['teacher_id'] = None
+    elif user_type == 'teacher':
+        teacher = Teacher.query.get(user_id)
+        if not teacher:
+            raise ValidationError('教师不存在')
+        user_name = teacher.name
+        data['student_id'] = None
+        data['teacher_id'] = user_id
+    else:
+        raise ValidationError('用户类型不支持预约')
+    
     # 获取预约时间
     start_time = data.get('start_time')
     end_time = data.get('end_time')
@@ -178,29 +215,6 @@ def create_reservation(data, current_user):
         
         # 3. 检查是否与其他预约冲突
         _check_reservation_conflict(data.get('equip_id'), start_time, end_time)
-    
-    # 根据用户类型设置用户ID
-    user_id = current_user['user_id']
-    user_type = current_user['user_type']
-    
-    # 填充冗余字段
-    user_name = None
-    if user_type == 'student':
-        student = Student.query.get(user_id)
-        if not student:
-            raise ValidationError('学生不存在')
-        user_name = student.name
-        data['student_id'] = user_id
-        data['teacher_id'] = None
-    elif user_type == 'teacher':
-        teacher = Teacher.query.get(user_id)
-        if not teacher:
-            raise ValidationError('教师不存在')
-        user_name = teacher.name
-        data['student_id'] = None
-        data['teacher_id'] = user_id
-    else:
-        raise ValidationError('用户类型不支持预约')
     
     # 创建预约
     reservation = Reservation(

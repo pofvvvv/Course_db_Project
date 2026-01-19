@@ -113,6 +113,8 @@ class TestingConfig(Config):
         'TEST_DATABASE_URI',
         'sqlite:///:memory:'
     )
+    # SQLite 不支持连接池参数，需要覆盖父类的配置
+    SQLALCHEMY_ENGINE_OPTIONS = {}
 
 
 class ProductionConfig(Config):

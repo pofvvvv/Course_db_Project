@@ -2,6 +2,7 @@
 预约模型
 """
 from datetime import datetime
+from sqlalchemy import BigInteger, Integer
 from app import db
 from app.models.mixins import ToDictMixin
 
@@ -10,7 +11,8 @@ class Reservation(db.Model, ToDictMixin):
     """预约表"""
     __tablename__ = 'reservation'
     
-    id = db.Column(db.BigInteger, primary_key=True, comment='预约ID')
+    # 使用 with_variant 让 SQLite 使用 Integer（支持自动递增），其他数据库使用 BigInteger
+    id = db.Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True, autoincrement=True, comment='预约ID')
     student_id = db.Column(db.String(10), db.ForeignKey('student.id'), nullable=True, comment='学生ID')
     teacher_id = db.Column(db.String(10), db.ForeignKey('teacher.id'), nullable=True, comment='导师ID')
     equip_id = db.Column(db.BigInteger, db.ForeignKey('equipment.id'), nullable=False, comment='设备ID')
