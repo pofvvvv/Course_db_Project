@@ -1,12 +1,13 @@
 """
 时间段服务层，处理时间段相关的业务逻辑
 """
-from datetime import time
+from datetime import time, datetime, date, timedelta
 from sqlalchemy import and_
 
 from app import db
 from app.models.equipment import Equipment
 from app.models.timeslot import TimeSlot
+from app.models.reservation import Reservation
 from app.utils.exceptions import NotFoundError, ValidationError
 
 
@@ -75,12 +76,158 @@ def get_timeslots_by_equipment(equip_id, only_active=False):
     return query.order_by(TimeSlot.start_time.asc()).all()
 
 
-def get_available_timeslots(equip_id):
+def get_available_timeslots(equip_id, target_date=None):
     """
-    获取设备可用时间段（当前阶段仅返回激活的时间段）
+    获取设备可用时间段
+    
+    Args:
+        equip_id: 设备ID
+        target_date: 目标日期（可选），如果提供则排除该日期已被预约的时间段
+    
+    Returns:
+        list: 可用时间段列表
     """
-    # TODO: 关联 Reservation 表，排除状态为 Pending(0) 和 Approved(1) 的时间段
-    return get_timeslots_by_equipment(equip_id, only_active=True)
+    _check_equipment_exists(equip_id)
+    
+    # 获取所有激活的时间段
+    time_slots = get_timeslots_by_equipment(equip_id, only_active=True)
+    
+    # 如果没有指定日期，直接返回所有激活的时间段
+    if not target_date:
+        return time_slots
+    
+    # 如果指定了日期，需要排除已被预约的时间段
+    if isinstance(target_date, str):
+        try:
+            target_date = datetime.fromisoformat(target_date).date()
+        except:
+            target_date = None
+    
+    if not target_date or not isinstance(target_date, date):
+        # 日期格式无效，返回所有激活时间段
+        return time_slots
+    
+    # 查询该日期上状态为待审(0)或已通过(1)的预约
+    reservations = Reservation.query.filter(
+        Reservation.equip_id == equip_id,
+        Reservation.status.in_([0, 1]),
+        Reservation.start_time.isnot(None),
+        Reservation.end_time.isnot(None)
+    ).all()
+    
+    # 过滤出该日期的预约
+    date_reservations = []
+    for res in reservations:
+        if res.start_time and res.start_time.date() == target_date:
+            date_reservations.append(res)
+    
+    # 如果没有该日期的预约，返回所有时间段
+    if not date_reservations:
+        return time_slots
+    
+    # 排除已被预约的时间段
+    available_slots = []
+    for slot in time_slots:
+        is_available = True
+        for res in date_reservations:
+            # 检查时间段是否与预约冲突
+            # 预约的开始时间和结束时间的时间部分
+            res_start_time = res.start_time.time()
+            res_end_time = res.end_time.time()
+            
+            # 如果时间段与预约时间有重叠，则不可用
+            # 重叠条件：max(start1, start2) < min(end1, end2)
+            if slot.start_time < res_end_time and slot.end_time > res_start_time:
+                is_available = False
+                break
+        
+        if is_available:
+            available_slots.append(slot)
+    
+    return available_slots
+
+
+def get_available_dates(equip_id, start_date=None, days=30):
+    """
+    获取设备的可用日期列表
+    
+    Args:
+        equip_id: 设备ID
+        start_date: 开始日期（可选），默认为今天
+        days: 查询天数（默认30天）
+    
+    Returns:
+        list: 可用日期列表（格式：YYYY-MM-DD）
+    """
+    _check_equipment_exists(equip_id)
+    
+    # 如果没有指定开始日期，使用今天
+    if not start_date:
+        start_date = datetime.now().date()
+    elif isinstance(start_date, str):
+        try:
+            start_date = datetime.fromisoformat(start_date).date()
+        except:
+            start_date = datetime.now().date()
+    
+    # 获取所有激活的时间段
+    time_slots = get_timeslots_by_equipment(equip_id, only_active=True)
+    
+    if not time_slots:
+        # 如果没有配置时间段，返回空列表
+        return []
+    
+    # 查询该设备在指定日期范围内的所有预约（待审或已通过）
+    end_date = start_date + timedelta(days=days)
+    reservations = Reservation.query.filter(
+        Reservation.equip_id == equip_id,
+        Reservation.status.in_([0, 1]),
+        Reservation.start_time.isnot(None),
+        Reservation.end_time.isnot(None),
+        Reservation.start_time >= datetime.combine(start_date, datetime.min.time()),
+        Reservation.start_time < datetime.combine(end_date, datetime.min.time())
+    ).all()
+    
+    # 按日期组织预约
+    date_reservations_map = {}
+    for res in reservations:
+        res_date = res.start_time.date()
+        if res_date not in date_reservations_map:
+            date_reservations_map[res_date] = []
+        date_reservations_map[res_date].append(res)
+    
+    # 遍历日期范围，检查每天是否有可用时间段
+    available_dates = []
+    current_date = start_date
+    
+    while current_date < end_date:
+        # 检查该日期是否有可用时间段
+        date_reservations = date_reservations_map.get(current_date, [])
+        
+        if not date_reservations:
+            # 如果该日期没有预约，说明所有时间段都可用
+            available_dates.append(current_date.isoformat())
+        else:
+            # 检查是否有时间段没有被完全占用
+            for slot in time_slots:
+                is_slot_available = True
+                for res in date_reservations:
+                    res_start_time = res.start_time.time()
+                    res_end_time = res.end_time.time()
+                    
+                    # 如果时间段与预约时间有重叠，则该时间段不可用
+                    if slot.start_time < res_end_time and slot.end_time > res_start_time:
+                        is_slot_available = False
+                        break
+                
+                # 如果至少有一个时间段可用，该日期就可用
+                if is_slot_available:
+                    available_dates.append(current_date.isoformat())
+                    break
+        
+        current_date += timedelta(days=1)
+    
+    return available_dates
 
 
 def check_slot_usage(slot_id):

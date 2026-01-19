@@ -96,7 +96,7 @@ def get_timeslots(equip_id):
 @swag_from({
     'tags': ['时间段管理'],
     'summary': '获取设备可用时间段',
-    'description': '返回设备可用时间段（当前仅返回 is_active=1 的时间段，后续需结合预约排除占用时间段）。',
+    'description': '返回设备可用时间段。如果不提供日期参数，返回所有激活的时间段；如果提供日期参数，会排除该日期已被预约的时间段。',
     'security': [{'Bearer': []}],
     'parameters': [
         {
@@ -105,6 +105,14 @@ def get_timeslots(equip_id):
             'required': True,
             'type': 'integer',
             'description': '设备ID'
+        },
+        {
+            'in': 'query',
+            'name': 'date',
+            'required': False,
+            'type': 'string',
+            'format': 'date',
+            'description': '目标日期（格式：YYYY-MM-DD），可选。如果提供，会排除该日期已被预约的时间段'
         }
     ],
     'responses': {
@@ -135,9 +143,80 @@ def get_timeslots(equip_id):
 })
 def get_available_timeslots(equip_id):
     try:
-        slots = timeslot_service.get_available_timeslots(equip_id)
+        # 获取可选的日期参数
+        target_date = request.args.get('date')
+        
+        slots = timeslot_service.get_available_timeslots(equip_id, target_date=target_date)
         data = timeslot_schema.dump(slots, many=True)
         return success(data=data, msg='查询成功')
+    except NotFoundError as e:
+        return fail(code=404, msg=e.message, data=e.payload)
+    except ValidationError as e:
+        return fail(code=422, msg=e.message, data=e.payload)
+    except Exception as e:
+        return fail(code=500, msg=f'查询失败: {str(e)}')
+
+
+@timeslot_bp.route('/equipment/<int:equip_id>/available-dates', methods=['GET'])
+@login_required
+@swag_from({
+    'tags': ['时间段管理'],
+    'summary': '获取设备可用日期列表',
+    'description': '返回设备在未来一段时间内的可用日期列表（有可用时间段的日期）。',
+    'security': [{'Bearer': []}],
+    'parameters': [
+        {
+            'in': 'path',
+            'name': 'equip_id',
+            'required': True,
+            'type': 'integer',
+            'description': '设备ID'
+        },
+        {
+            'in': 'query',
+            'name': 'start_date',
+            'required': False,
+            'type': 'string',
+            'format': 'date',
+            'description': '开始日期（格式：YYYY-MM-DD），可选，默认为今天'
+        },
+        {
+            'in': 'query',
+            'name': 'days',
+            'required': False,
+            'type': 'integer',
+            'description': '查询天数（默认30天）'
+        }
+    ],
+    'responses': {
+        200: {
+            'description': '成功返回可用日期列表',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'code': {'type': 'integer', 'example': 200},
+                    'msg': {'type': 'string', 'example': 'success'},
+                    'data': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'string',
+                            'format': 'date',
+                            'example': '2024-01-15'
+                        }
+                    }
+                }
+            }
+        }
+    }
+})
+def get_available_dates(equip_id):
+    try:
+        # 获取可选的查询参数
+        start_date = request.args.get('start_date')
+        days = request.args.get('days', type=int, default=30)
+        
+        dates = timeslot_service.get_available_dates(equip_id, start_date=start_date, days=days)
+        return success(data=dates, msg='查询成功')
     except NotFoundError as e:
         return fail(code=404, msg=e.message, data=e.payload)
     except ValidationError as e:

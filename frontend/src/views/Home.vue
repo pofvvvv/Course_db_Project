@@ -14,9 +14,15 @@
             让科研更简单，让创新更高效
           </p>
           <div class="hero-illustration">
-            <div class="illustration-box box-1"></div>
-            <div class="illustration-box box-2"></div>
-            <div class="illustration-box box-3"></div>
+            <div class="illustration-box box-1">
+              <el-icon :size="40"><DataLine /></el-icon>
+            </div>
+            <div class="illustration-box box-2">
+              <el-icon :size="48"><Monitor /></el-icon>
+            </div>
+            <div class="illustration-box box-3">
+              <el-icon :size="40"><DataAnalysis /></el-icon>
+            </div>
           </div>
         </div>
 
@@ -152,7 +158,7 @@
               </el-tabs>
               <div class="equipment-list">
                 <div
-                  v-for="(equipment, index) in topEquipment"
+                  v-for="(equipment, index) in topEquipment.slice(0, 3)"
                   :key="index"
                   class="equipment-item"
                   :class="{ 'top-three': index < 3 }"
@@ -222,7 +228,10 @@ import {
   InfoFilled,
   Trophy,
   Bell,
-  ArrowRight
+  ArrowRight,
+  DataLine,
+  Monitor,
+  DataAnalysis
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -253,21 +262,21 @@ const quickAccessItems = ref([
     description: '快速预约所需仪器设备',
     icon: Calendar,
     path: '/reservations',
-    color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    color: 'linear-gradient(135deg, #717174 0%, #5b5c66 100%)'
   },
   {
     title: '规章制度',
     description: '查看设备使用相关规定',
     icon: Document,
     path: '/rules',
-    color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
+    color: 'linear-gradient(135deg, #717174 0%, #9AA0A6 100%)'
   },
   {
     title: '开放流程',
     description: '了解设备预约流程',
     icon: InfoFilled,
     path: '/process',
-    color: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'
+    color: 'linear-gradient(135deg, #717174 0%, #adb0be 100%)'
   }
 ])
 
@@ -383,7 +392,7 @@ const getRankClass = (index) => {
 <style scoped lang="scss">
 .home-page {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--bg-main);
 }
 
 .container {
@@ -394,8 +403,8 @@ const getRankClass = (index) => {
 
 /* Hero Section */
 .hero-section {
-  padding: 60px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px 20px;
+  background: var(--primary-gradient);
   position: relative;
   overflow: hidden;
 
@@ -447,7 +456,7 @@ const getRankClass = (index) => {
   font-size: 18px;
   line-height: 1.8;
   opacity: 0.95;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 
   @media (max-width: 768px) {
     font-size: 16px;
@@ -467,6 +476,21 @@ const getRankClass = (index) => {
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
   animation: float 3s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+  }
+
+  .el-icon {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  }
 
   &.box-1 {
     animation-delay: 0s;
@@ -490,11 +514,11 @@ const getRankClass = (index) => {
 }
 
 .login-card {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--bg-card);
   backdrop-filter: blur(20px);
   border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  border: none;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-light);
 }
 
 .login-header {
@@ -504,7 +528,7 @@ const getRankClass = (index) => {
     margin: 0;
     font-size: 24px;
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
   }
 }
 
@@ -527,13 +551,13 @@ const getRankClass = (index) => {
   height: 48px;
   font-size: 16px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--accent);
   border: none;
 
   &:hover {
     opacity: 0.9;
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 8px 20px rgba(66, 67, 82, 0.4);
   }
 }
 
@@ -544,8 +568,8 @@ const getRankClass = (index) => {
 
 /* Quick Access */
 .quick-access {
-  padding: 60px 20px;
-  background: #fff;
+  padding: 30px 20px;
+  background: var(--bg-card);
 }
 
 .quick-access-grid {
@@ -587,20 +611,20 @@ const getRankClass = (index) => {
 .access-title {
   font-size: 20px;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 10px;
 }
 
 .access-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 /* Main Content */
 .main-content {
-  padding: 60px 20px;
-  background: #f5f7fa;
+  padding: 40px 20px;
+  background: var(--bg-main);
 }
 
 .announcements-card,
@@ -619,7 +643,7 @@ const getRankClass = (index) => {
     margin: 0;
     font-size: 20px;
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -629,7 +653,7 @@ const getRankClass = (index) => {
 .announcements-list {
   .announcement-item {
     padding: 16px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-light);
     cursor: pointer;
     transition: all 0.3s ease;
 
@@ -638,7 +662,7 @@ const getRankClass = (index) => {
     }
 
     &:hover {
-      background: #f8f9fa;
+      background: var(--bg-main);
       padding-left: 8px;
       border-radius: 8px;
     }
@@ -654,13 +678,13 @@ const getRankClass = (index) => {
   .announcement-title {
     flex: 1;
     font-size: 15px;
-    color: #333;
+    color: var(--text-primary);
     font-weight: 500;
   }
 
   .announcement-date {
     font-size: 13px;
-    color: #999;
+    color: var(--text-muted);
     white-space: nowrap;
   }
 }
@@ -675,7 +699,7 @@ const getRankClass = (index) => {
     align-items: center;
     gap: 16px;
     padding: 16px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-light);
 
     &:last-child {
       border-bottom: none;
@@ -698,8 +722,8 @@ const getRankClass = (index) => {
     justify-content: center;
     font-size: 16px;
     font-weight: 600;
-    color: #666;
-    background: #f0f0f0;
+    color: var(--text-secondary);
+    background: var(--bg-main);
     flex-shrink: 0;
 
     &.rank-gold {
@@ -730,20 +754,20 @@ const getRankClass = (index) => {
 
   .equipment-name {
     font-size: 14px;
-    color: #333;
+    color: var(--text-primary);
     font-weight: 500;
   }
 
   .equipment-count {
     font-size: 12px;
-    color: #999;
+    color: var(--text-muted);
   }
 }
 
 /* Footer */
 .home-footer {
-  background: #2c3e50;
-  color: #ecf0f1;
+  background: var(--gray-strong);
+  color: var(--text-muted);
   padding: 60px 20px 30px;
 
   .footer-content {
@@ -770,7 +794,7 @@ const getRankClass = (index) => {
       font-size: 14px;
       line-height: 1.8;
       margin-bottom: 10px;
-      color: #bdc3c7;
+      color: var(--gray-soft);
 
       &:last-child {
         margin-bottom: 0;
@@ -778,10 +802,10 @@ const getRankClass = (index) => {
     }
 
     :deep(.el-link) {
-      color: #3498db;
+      color: var(--accent);
 
       &:hover {
-        color: #5dade2;
+        opacity: 0.8;
       }
     }
   }
@@ -794,7 +818,7 @@ const getRankClass = (index) => {
     p {
       margin: 0;
       font-size: 14px;
-      color: #95a5a6;
+      color: var(--gray-soft);
     }
   }
 }

@@ -24,7 +24,7 @@ equipment_schema = EquipmentSchema()
 @swag_from({
     'tags': ['设备管理'],
     'summary': '获取设备列表',
-    'description': '获取设备列表，支持按实验室ID和关键词筛选（普通用户可访问）',
+    'description': '获取设备列表，支持按实验室ID和关键词筛选，支持分页（普通用户可访问）',
     'security': [{'Bearer': []}],
     'parameters': [
         {
@@ -54,6 +54,22 @@ equipment_schema = EquipmentSchema()
             'type': 'integer',
             'required': False,
             'description': '设备状态筛选'
+        },
+        {
+            'in': 'query',
+            'name': 'page',
+            'type': 'integer',
+            'required': False,
+            'description': '页码（从1开始，默认1）',
+            'default': 1
+        },
+        {
+            'in': 'query',
+            'name': 'page_size',
+            'type': 'integer',
+            'required': False,
+            'description': '每页数量（默认10，最大100）',
+            'default': 10
         }
     ],
     'responses': {
@@ -65,16 +81,23 @@ equipment_schema = EquipmentSchema()
                     'code': {'type': 'integer', 'example': 200},
                     'msg': {'type': 'string', 'example': 'success'},
                     'data': {
-                        'type': 'array',
-                        'items': {
-                            'type': 'object',
-                            'properties': {
-                                'id': {'type': 'integer', 'example': 1},
-                                'name': {'type': 'string', 'example': '扫描电子显微镜'},
-                                'lab_id': {'type': 'integer', 'example': 1},
-                                'category': {'type': 'integer', 'example': 2},
-                                'status': {'type': 'integer', 'example': 1}
-                            }
+                        'type': 'object',
+                        'properties': {
+                            'items': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'id': {'type': 'integer', 'example': 1},
+                                        'name': {'type': 'string', 'example': '扫描电子显微镜'},
+                                        'lab_id': {'type': 'integer', 'example': 1},
+                                        'lab_name': {'type': 'string', 'example': '材料实验室'},
+                                        'category': {'type': 'integer', 'example': 2},
+                                        'status': {'type': 'integer', 'example': 1}
+                                    }
+                                }
+                            },
+                            'total': {'type': 'integer', 'example': 100}
                         }
                     }
                 }
@@ -86,18 +109,26 @@ equipment_schema = EquipmentSchema()
     }
 })
 def get_equipments():
-    """获取设备列表（支持筛选）"""
+    """获取设备列表（支持筛选和分页）"""
     try:
         # 获取查询参数
         lab_id = request.args.get('lab_id', type=int)
         keyword = request.args.get('keyword', type=str)
         category = request.args.get('category', type=int)
         status = request.args.get('status', type=int)
+        page = request.args.get('page', type=int, default=1)
+        page_size = request.args.get('page_size', type=int, default=9)
         
-        # 构建缓存键（包含所有筛选条件）
-        # 查询 lab_id=1, keyword="显微镜", category=2, status=1
-        # api:equipment:list:lab_1:kw_显微镜:cat_2:st_1
-        cache_key = f'api:equipment:list:lab_{lab_id}:kw_{keyword}:cat_{category}:st_{status}'
+        # 验证分页参数
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 9
+        elif page_size > 100:
+            page_size = 100  # 限制每页最大数量
+        
+        # 构建缓存键（包含所有筛选条件和分页参数）
+        cache_key = f'api:equipment:list:lab_{lab_id}:kw_{keyword}:cat_{category}:st_{status}:p_{page}:ps_{page_size}'
         
         # 尝试从缓存获取
         cached_data = redis_client.get(cache_key)
@@ -105,15 +136,23 @@ def get_equipments():
             return success(data=cached_data, msg='查询成功')
         
         # 查询设备列表
-        equipments = equipment_service.get_equipment_list(
+        equipments, total = equipment_service.get_equipment_list(
             lab_id=lab_id,
             keyword=keyword,
             category=category,
-            status=status
+            status=status,
+            page=page,
+            page_size=page_size
         )
         
         # 序列化
-        data = equipment_schema.dump(equipments, many=True)
+        items = equipment_schema.dump(equipments, many=True)
+        
+        # 构建返回数据
+        data = {
+            'items': items,
+            'total': total
+        }
         
         # 存入缓存（5分钟过期）
         redis_client.set(cache_key, data, ex=300)

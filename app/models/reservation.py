@@ -26,6 +26,10 @@ class Reservation(db.Model, ToDictMixin):
     start_time = db.Column(db.DateTime, nullable=True, comment='开始时间（冗余字段）')
     end_time = db.Column(db.DateTime, nullable=True, comment='结束时间（冗余字段）')
     
+    # 业务字段
+    description = db.Column(db.Text, nullable=True, comment='预约用途说明')
+    reject_reason = db.Column(db.String(500), nullable=True, comment='拒绝理由')
+    
     # 添加约束：student_id 和 teacher_id 必须有一个不为空，但不能同时为空
     # 添加索引：优化查询性能
     __table_args__ = (

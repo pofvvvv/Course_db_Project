@@ -12,7 +12,7 @@ const routes = [
     path: '/laboratories',
     name: 'LaboratoryList',
     component: LaboratoryList,
-    meta: { title: '实验室管理' }
+    meta: { title: '实验室管理', requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/equipment',
@@ -58,6 +58,7 @@ const router = createRouter({
 // ... 后面的 beforeEach 守卫代码保持不变
 
 import { useUserStore } from '@/stores/user'
+import { ElMessage } from 'element-plus'
 
 router.beforeEach((to, from, next) => {
   document.title = to.meta.title ? `${to.meta.title} - 高校大型仪器设备共享服务平台` : '高校大型仪器设备共享服务平台'
@@ -66,6 +67,11 @@ router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   if (to.meta.requiresAuth && !userStore.isLoggedIn) {
     // 需要登录但未登录，跳转到首页
+    ElMessage.warning('请先登录')
+    next('/')
+  } else if (to.meta.requiresAdmin && !userStore.isAdmin) {
+    // 需要管理员权限但没有权限，跳转到首页
+    ElMessage.warning('需要管理员权限')
     next('/')
   } else {
     next()

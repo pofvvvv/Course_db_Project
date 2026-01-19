@@ -11,9 +11,16 @@ class EquipmentSchema(BaseSchema):
     id = fields.Integer(dump_only=True, description='设备ID')
     name = fields.String(required=True, validate=validate.Length(min=1, max=100), description='设备名称')
     lab_id = fields.Integer(allow_none=True, description='所属实验室ID')
+    lab_name = fields.Method('get_lab_name', dump_only=True, description='所属实验室名称')
     category = fields.Integer(required=True, validate=validate.OneOf([1, 2]), description='设备类别 (1:学院, 2:实验室)')
     status = fields.Integer(required=True, validate=validate.Range(min=0, max=10), description='设备状态')
     next_avail_time = fields.DateTime(allow_none=True, format='iso', description='下次可用时间')
+    
+    def get_lab_name(self, obj):
+        """从关联的实验室对象获取实验室名称"""
+        if obj.laboratory:
+            return obj.laboratory.name
+        return None
 
 
 class EquipmentCreateSchema(BaseCreateSchema):

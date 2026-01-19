@@ -147,6 +147,9 @@
             style="width: 100%"
             format="YYYY-MM-DD HH:mm:ss"
             value-format="YYYY-MM-DD HH:mm:ss"
+            :disabled-date="disabledDate"
+            :disabled-time="disabledTime"
+            @calendar-change="handleCalendarChange"
           />
         </el-form-item>
         <el-form-item label="用途说明">
@@ -178,12 +181,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { Calendar, Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getReservationList, createReservation, cancelReservation, approveReservation, rejectReservation } from '@/api/reservation'
 import { getEquipmentList } from '@/api/equipment'
+import { getAvailableTimeslots, getAvailableDates } from '@/api/timeslot'
 
 const userStore = useUserStore()
 const activeTab = ref('my')
@@ -211,6 +215,11 @@ const createForm = reactive({
   timeRange: [],
   description: ''
 })
+
+// 可用时间段相关
+const availableTimeslots = ref([]) // 存储可用时间段
+const selectedDate = ref(null) // 当前选择的日期
+const availableDates = ref([]) // 存储可用日期列表
 
 // 详情相关
 const showDetailDialog = ref(false)
@@ -268,7 +277,75 @@ const handleTabChange = (tab) => {
 // 创建预约
 const handleCreate = () => {
   showCreateDialog.value = true
+  createForm.equipment_id = null
+  createForm.timeRange = []
+  createForm.description = ''
+  availableTimeslots.value = []
+  selectedDate.value = null
+  availableDates.value = []
   searchEquipment('') // 加载初始设备列表
+}
+
+// 监听设备选择变化，获取可用时间段和可用日期
+watch(() => createForm.equipment_id, async (newEquipId) => {
+  if (newEquipId) {
+    await Promise.all([
+      fetchAvailableTimeslots(newEquipId, null),
+      fetchAvailableDates(newEquipId)
+    ])
+  } else {
+    availableTimeslots.value = []
+    availableDates.value = []
+  }
+})
+
+// 获取可用日期
+const fetchAvailableDates = async (equipId) => {
+  if (!equipId) return
+  
+  try {
+    const res = await getAvailableDates(equipId, null, 60) // 查询未来60天
+    if (res.code === 200) {
+      availableDates.value = res.data || []
+    }
+  } catch (error) {
+    console.error('获取可用日期失败:', error)
+    availableDates.value = []
+  }
+}
+
+// 获取可用时间段
+const fetchAvailableTimeslots = async (equipId, date = null) => {
+  if (!equipId) return
+  
+  try {
+    const res = await getAvailableTimeslots(equipId, date)
+    if (res.code === 200) {
+      availableTimeslots.value = res.data || []
+    }
+  } catch (error) {
+    console.error('获取可用时间段失败:', error)
+    availableTimeslots.value = []
+  }
+}
+
+// 处理日期选择器日历变化
+const handleCalendarChange = async (dates) => {
+  if (!createForm.equipment_id) return
+  
+  // 如果选择了日期，获取该日期的可用时间段
+  if (dates && dates.length > 0) {
+    const date = dates[0]
+    if (date) {
+      const dateStr = typeof date === 'string' ? date.split(' ')[0] : date.toISOString().split('T')[0]
+      selectedDate.value = dateStr
+      await fetchAvailableTimeslots(createForm.equipment_id, dateStr)
+    }
+  } else {
+    selectedDate.value = null
+    // 如果没有选择日期，获取所有可用时间段
+    await fetchAvailableTimeslots(createForm.equipment_id, null)
+  }
 }
 
 const searchEquipment = async (query) => {
@@ -390,6 +467,161 @@ const getStatusType = (status) => {
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString()
+}
+
+// 禁用过去的日期以及没有可用时间段的日期
+const disabledDate = (time) => {
+  // 禁用今天之前的日期（今天允许选择）
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (time.getTime() < today.getTime()) {
+    return true
+  }
+  
+  // 如果有可用日期列表，禁用不在列表中的日期
+  if (availableDates.value && availableDates.value.length > 0) {
+    const dateStr = time.toISOString().split('T')[0]
+    return !availableDates.value.includes(dateStr)
+  }
+  
+  // 如果没有可用日期列表，允许选择（可能是还在加载中或没有配置时间段）
+  return false
+}
+
+// 禁用过去的时间以及不可用的时间段
+const disabledTime = (date) => {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const isToday = date && new Date(date).getTime() >= today.getTime() && 
+                  new Date(date).getTime() < today.getTime() + 24 * 60 * 60 * 1000
+  
+  // 如果没有可用时间段配置，只禁用过去的时间
+  if (!availableTimeslots.value || availableTimeslots.value.length === 0) {
+    if (isToday) {
+      return {
+        disabledHours: () => {
+          const hours = []
+          for (let i = 0; i < now.getHours(); i++) {
+            hours.push(i)
+          }
+          return hours
+        },
+        disabledMinutes: (hour) => {
+          const minutes = []
+          if (hour === now.getHours()) {
+            for (let i = 0; i <= now.getMinutes(); i++) {
+              minutes.push(i)
+            }
+          }
+          return minutes
+        },
+        disabledSeconds: (hour, minute) => {
+          const seconds = []
+          if (hour === now.getHours() && minute === now.getMinutes()) {
+            for (let i = 0; i <= now.getSeconds(); i++) {
+              seconds.push(i)
+            }
+          }
+          return seconds
+        }
+      }
+    }
+    return {}
+  }
+  
+  // 构建可用时间段的集合
+  const availableRanges = availableTimeslots.value.map(slot => {
+    const [startH, startM, startS] = slot.start_time.split(':').map(Number)
+    const [endH, endM, endS] = slot.end_time.split(':').map(Number)
+    return {
+      start: startH * 3600 + startM * 60 + startS, // 转换为秒数
+      end: endH * 3600 + endM * 60 + endS
+    }
+  })
+  
+  // 检查某个时间点是否在可用时间段内
+  const isTimeAvailable = (hour, minute, second) => {
+    const timeInSeconds = hour * 3600 + minute * 60 + second
+    return availableRanges.some(range => timeInSeconds >= range.start && timeInSeconds < range.end)
+  }
+  
+  // 禁用不在可用时间段内的小时
+  const disabledHours = []
+  for (let hour = 0; hour < 24; hour++) {
+    // 检查该小时是否有任何可用时间
+    const hasAvailableTime = availableRanges.some(range => {
+      const hourStart = hour * 3600
+      const hourEnd = (hour + 1) * 3600
+      return range.start < hourEnd && range.end > hourStart
+    })
+    
+    if (!hasAvailableTime) {
+      disabledHours.push(hour)
+    } else if (isToday && hour < now.getHours()) {
+      // 如果是今天，还要禁用已经过去的小时
+      disabledHours.push(hour)
+    }
+  }
+  
+  // 禁用不在可用时间段内的分钟和秒
+  const disabledMinutesMap = {}
+  const disabledSecondsMap = {}
+  
+  // 为每个小时计算禁用的分钟
+  for (let hour = 0; hour < 24; hour++) {
+    if (disabledHours.includes(hour)) {
+      // 如果整个小时都被禁用，禁用所有分钟
+      disabledMinutesMap[hour] = Array.from({ length: 60 }, (_, i) => i)
+      continue
+    }
+    
+    disabledMinutesMap[hour] = []
+    for (let minute = 0; minute < 60; minute++) {
+      // 检查该分钟是否有任何可用时间
+      const hasAvailableTime = availableRanges.some(range => {
+        const minuteStart = hour * 3600 + minute * 60
+        const minuteEnd = minuteStart + 60
+        return range.start < minuteEnd && range.end > minuteStart
+      })
+      
+      if (!hasAvailableTime) {
+        disabledMinutesMap[hour].push(minute)
+      } else if (isToday && hour === now.getHours() && minute <= now.getMinutes()) {
+        // 如果是今天且是当前小时，禁用已过去的分钟
+        disabledMinutesMap[hour].push(minute)
+      }
+      
+      // 为每个分钟计算禁用的秒
+      if (!hasAvailableTime || (isToday && hour === now.getHours() && minute < now.getMinutes())) {
+        const key = `${hour}-${minute}`
+        disabledSecondsMap[key] = Array.from({ length: 60 }, (_, i) => i)
+      } else if (isToday && hour === now.getHours() && minute === now.getMinutes()) {
+        const key = `${hour}-${minute}`
+        disabledSecondsMap[key] = []
+        for (let second = 0; second <= now.getSeconds(); second++) {
+          disabledSecondsMap[key].push(second)
+        }
+      } else {
+        // 检查该秒是否在可用时间段内
+        const key = `${hour}-${minute}`
+        disabledSecondsMap[key] = []
+        for (let second = 0; second < 60; second++) {
+          if (!isTimeAvailable(hour, minute, second)) {
+            disabledSecondsMap[key].push(second)
+          }
+        }
+      }
+    }
+  }
+  
+  return {
+    disabledHours: () => disabledHours,
+    disabledMinutes: (hour) => disabledMinutesMap[hour] || [],
+    disabledSeconds: (hour, minute) => {
+      const key = `${hour}-${minute}`
+      return disabledSecondsMap[key] || []
+    }
+  }
 }
 
 onMounted(() => {

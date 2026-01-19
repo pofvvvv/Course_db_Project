@@ -25,8 +25,8 @@ defineProps({
   .spinner {
     width: 50px;
     height: 50px;
-    border: 4px solid rgba(102, 126, 234, 0.2);
-    border-top-color: #667eea;
+    border: 4px solid rgba(66, 67, 82, 0.2);
+    border-top-color: #424352;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }

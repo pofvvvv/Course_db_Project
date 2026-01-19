@@ -23,6 +23,10 @@ class ReservationSchema(BaseSchema):
     price = fields.Decimal(allow_none=True, places=2, description='价格')
     start_time = fields.DateTime(allow_none=True, format='iso', description='开始时间')
     end_time = fields.DateTime(allow_none=True, format='iso', description='结束时间')
+    
+    # 业务字段
+    description = fields.String(allow_none=True, description='预约用途说明')
+    reject_reason = fields.String(allow_none=True, description='拒绝理由')
 
 
 class ReservationCreateSchema(BaseCreateSchema):
@@ -34,6 +38,7 @@ class ReservationCreateSchema(BaseCreateSchema):
     price = fields.Decimal(allow_none=True, places=2, validate=validate.Range(min=0), description='价格')
     start_time = fields.DateTime(allow_none=True, format='iso', description='开始时间')
     end_time = fields.DateTime(allow_none=True, format='iso', description='结束时间')
+    description = fields.String(allow_none=True, validate=validate.Length(max=1000), description='预约用途说明')
 
 
 class ReservationUpdateSchema(BaseUpdateSchema):

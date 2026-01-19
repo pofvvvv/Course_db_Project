@@ -3,13 +3,134 @@
 处理预约相关的业务逻辑
 """
 from datetime import datetime
+from sqlalchemy import and_
 from app import db
 from app.models.reservation import Reservation
 from app.models.student import Student
 from app.models.teacher import Teacher
 from app.models.equipment import Equipment
+from app.models.timeslot import TimeSlot
 from app.utils.exceptions import NotFoundError, ValidationError
 from app.utils.redis_client import redis_client
+
+
+def _validate_time_range(start_time, end_time):
+    """
+    验证时间范围是否合理
+    
+    Args:
+        start_time: 开始时间（datetime）
+        end_time: 结束时间（datetime）
+    
+    Raises:
+        ValidationError: 时间范围无效
+    """
+    if not start_time or not end_time:
+        raise ValidationError('开始时间和结束时间不能为空', payload={'field': 'time_range'})
+    
+    if start_time >= end_time:
+        raise ValidationError('开始时间必须早于结束时间', payload={'field': 'time_range'})
+    
+    # 检查预约时间不能是过去的时间
+    if start_time < datetime.utcnow():
+        raise ValidationError('预约时间不能是过去的时间', payload={'field': 'start_time'})
+
+
+def _check_timeslot_availability(equip_id, start_time, end_time):
+    """
+    检查预约时间是否在设备的可用时间段内
+    
+    Args:
+        equip_id: 设备ID
+        start_time: 预约开始时间（datetime）
+        end_time: 预约结束时间（datetime）
+    
+    Raises:
+        ValidationError: 不在可用时间段内
+    """
+    # 获取设备的激活时间段
+    time_slots = TimeSlot.query.filter(
+        TimeSlot.equip_id == equip_id,
+        TimeSlot.is_active == 1
+    ).all()
+    
+    if not time_slots:
+        raise ValidationError('该设备没有配置可用时间段', payload={'field': 'equip_id'})
+    
+    # 提取预约时间的日期和时间部分
+    start_date = start_time.date()
+    end_date = end_time.date()
+    start_time_only = start_time.time()
+    end_time_only = end_time.time()
+    
+    # 检查预约的开始时间和结束时间必须在同一天
+    if start_date != end_date:
+        raise ValidationError('预约的开始时间和结束时间必须在同一天', payload={'field': 'time_range'})
+    
+    # 检查预约时间是否在某个时间段内
+    # 注意：时间段是每天重复的，所以只需要检查时间部分
+    found_valid_slot = False
+    for slot in time_slots:
+        # 检查预约的开始时间和结束时间是否都在该时间段内
+        if slot.start_time <= start_time_only < slot.end_time and \
+           slot.start_time < end_time_only <= slot.end_time:
+            found_valid_slot = True
+            break
+    
+    if not found_valid_slot:
+        raise ValidationError(
+            '预约时间不在设备的可用时间段内',
+            payload={'field': 'time_range', 'available_slots': [
+                {'start': str(slot.start_time), 'end': str(slot.end_time)}
+                for slot in time_slots
+            ]}
+        )
+
+
+def _check_reservation_conflict(equip_id, start_time, end_time, exclude_reservation_id=None):
+    """
+    检查预约时间是否与其他预约冲突
+    
+    Args:
+        equip_id: 设备ID
+        start_time: 预约开始时间（datetime）
+        end_time: 预约结束时间（datetime）
+        exclude_reservation_id: 排除的预约ID（用于更新预约时排除自己）
+    
+    Raises:
+        ValidationError: 时间冲突
+    """
+    # 查询同一设备上状态为待审(0)或已通过(1)的预约
+    query = Reservation.query.filter(
+        Reservation.equip_id == equip_id,
+        Reservation.status.in_([0, 1])  # 待审或已通过
+    )
+    
+    if exclude_reservation_id:
+        query = query.filter(Reservation.id != exclude_reservation_id)
+    
+    # 检查时间冲突：max(start1, start2) < min(end1, end2)
+    conflicting_reservations = query.filter(
+        and_(
+            Reservation.start_time < end_time,
+            Reservation.end_time > start_time
+        )
+    ).all()
+    
+    if conflicting_reservations:
+        conflict_info = [
+            {
+                'id': r.id,
+                'start_time': r.start_time.isoformat() if r.start_time else None,
+                'end_time': r.end_time.isoformat() if r.end_time else None,
+                'status': r.status
+            }
+            for r in conflicting_reservations
+        ]
+        raise ValidationError(
+            '预约时间与已有预约冲突',
+            payload={'field': 'time_range', 'conflicts': conflict_info}
+        )
 
 
 def create_reservation(data, current_user):
@@ -30,6 +151,33 @@ def create_reservation(data, current_user):
     equipment = Equipment.query.get(data.get('equip_id'))
     if not equipment:
         raise ValidationError('设备不存在', payload={'field': 'equip_id'})
+    
+    # 获取预约时间
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    
+    # 如果提供了时间，进行验证
+    if start_time and end_time:
+        # 确保是 datetime 对象
+        if isinstance(start_time, str):
+            try:
+                start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            except:
+                raise ValidationError('开始时间格式错误', payload={'field': 'start_time'})
+        if isinstance(end_time, str):
+            try:
+                end_time = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            except:
+                raise ValidationError('结束时间格式错误', payload={'field': 'end_time'})
+        
+        # 1. 验证时间范围
+        _validate_time_range(start_time, end_time)
+        
+        # 2. 检查是否在可用时间段内
+        _check_timeslot_availability(data.get('equip_id'), start_time, end_time)
+        
+        # 3. 检查是否与其他预约冲突
+        _check_reservation_conflict(data.get('equip_id'), start_time, end_time)
     
     # 根据用户类型设置用户ID
     user_id = current_user['user_id']
@@ -64,8 +212,8 @@ def create_reservation(data, current_user):
         user_name=user_name,
         equip_name=equipment.name,
         price=data.get('price'),
-        start_time=data.get('start_time'),
-        end_time=data.get('end_time'),
+        start_time=start_time,
+        end_time=end_time,
         description=data.get('description')
     )
     
@@ -77,6 +225,9 @@ def create_reservation(data, current_user):
         _clear_reservation_cache()
         
         return reservation
+    except ValidationError:
+        # 重新抛出验证错误
+        raise
     except Exception as e:
         db.session.rollback()
         raise ValidationError(f'创建预约失败: {str(e)}')

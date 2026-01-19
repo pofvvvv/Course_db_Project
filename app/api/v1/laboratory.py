@@ -11,6 +11,7 @@ from app.api.v1.schemas.lab_schema import (
 )
 from app.utils.response import success, fail
 from app.utils.exceptions import NotFoundError, ValidationError
+from app.utils.auth import admin_required
 from app.utils.redis_client import redis_client
 
 # 创建蓝图
@@ -23,10 +24,12 @@ lab_update_schema = LaboratoryUpdateSchema()
 
 
 @lab_bp.route('/', methods=['GET'])
+@admin_required
 @swag_from({
     'tags': ['实验室管理'],
     'summary': '获取实验室列表',
-    'description': '获取所有实验室的列表',
+    'description': '获取所有实验室的列表（需要管理员权限）',
+    'security': [{'Bearer': []}],
     'responses': {
         200: {
             'description': '成功返回实验室列表',
@@ -74,10 +77,12 @@ def get_labs():
 
 
 @lab_bp.route('/', methods=['POST'])
+@admin_required
 @swag_from({
     'tags': ['实验室管理'],
     'summary': '创建实验室',
-    'description': '创建一个新的实验室',
+    'description': '创建一个新的实验室（需要管理员权限）',
+    'security': [{'Bearer': []}],
     'parameters': [{
         'in': 'body',
         'name': 'body',
@@ -146,10 +151,12 @@ def create_lab():
 
 
 @lab_bp.route('/<int:lab_id>', methods=['PUT'])
+@admin_required
 @swag_from({
     'tags': ['实验室管理'],
     'summary': '更新实验室',
-    'description': '更新指定实验室的信息（会同步更新学生表中的冗余字段）',
+    'description': '更新指定实验室的信息（会同步更新学生表中的冗余字段）（需要管理员权限）',
+    'security': [{'Bearer': []}],
     'parameters': [
         {
             'in': 'path',
@@ -232,10 +239,12 @@ def update_lab(lab_id):
 
 
 @lab_bp.route('/<int:lab_id>', methods=['DELETE'])
+@admin_required
 @swag_from({
     'tags': ['实验室管理'],
     'summary': '删除实验室',
-    'description': '删除指定的实验室',
+    'description': '删除指定的实验室（需要管理员权限）',
+    'security': [{'Bearer': []}],
     'parameters': [{
         'in': 'path',
         'name': 'lab_id',

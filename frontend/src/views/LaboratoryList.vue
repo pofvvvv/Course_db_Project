@@ -171,11 +171,16 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Plus, Edit, Delete, OfficeBuilding, Location, List 
 } from '@element-plus/icons-vue'
 import { getLabList, createLab, updateLab, deleteLab } from '@/api/laboratory'
+import { useUserStore } from '@/stores/user'
+
+const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const labList = ref([])
@@ -314,7 +319,15 @@ const resetForm = () => {
   formRef.value?.resetFields()
 }
 
+// 检查权限
 onMounted(() => {
+  // 检查是否是管理员
+  if (!userStore.isAdmin) {
+    ElMessage.warning('需要管理员权限才能访问此页面')
+    router.push('/')
+    return
+  }
+  
   fetchList()
 })
 </script>
@@ -342,7 +355,7 @@ onMounted(() => {
     width: 80px;
     height: 80px;
     border-radius: 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #717174 0%, #adb0be 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -476,7 +489,7 @@ onMounted(() => {
   :deep(.el-dialog__title) {
     font-size: 22px;
     font-weight: 600;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #717174 0%, #adb0be 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

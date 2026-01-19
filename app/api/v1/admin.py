@@ -11,11 +11,12 @@ from app.api.v1.schemas.equipment_schema import (
 from app.api.v1.schemas.timeslot_schema import (
     TimeSlotSchema, TimeSlotCreateSchema, TimeSlotUpdateSchema
 )
+from app.api.v1.schemas.reservation_schema import ReservationSchema
 from app.utils.response import success, fail
 from app.utils.exceptions import NotFoundError, ValidationError
-from app.utils.auth import admin_required
+from app.utils.auth import admin_required, get_current_user
 from app.utils.redis_client import redis_client
-from app.services import timeslot_service
+from app.services import timeslot_service, reservation_service
 from app.models.timeslot import TimeSlot
 
 # åå»ºèå¾
@@ -416,3 +417,152 @@ def _clear_timeslot_cache(equip_id):
     Çå³ýÊ±¼ä¶ÎÁÐ±í»º´æ
     """
     redis_client.delete(f'timeslot:list:{equip_id}')
+
+
+@admin_bp.route('/reservations/<int:reservation_id>/approve', methods=['PUT'])
+@admin_required
+@swag_from({
+    'tags': ['管理员预约审批'],
+    'summary': '审批通过预约',
+    'description': '管理员审批通过预约（需要管理员权限）',
+    'security': [{'Bearer': []}],
+    'parameters': [{
+        'in': 'path',
+        'name': 'reservation_id',
+        'type': 'integer',
+        'required': True,
+        'description': '预约ID'
+    }],
+    'responses': {
+        200: {
+            'description': '成功审批通过',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'code': {'type': 'integer', 'example': 200},
+                    'msg': {'type': 'string', 'example': '审批成功'}
+                }
+            }
+        },
+        403: {
+            'description': '需要管理员权限'
+        },
+        404: {
+            'description': '预约不存在'
+        },
+        422: {
+            'description': '状态流转无效'
+        }
+    }
+})
+def approve_reservation(reservation_id):
+    """管理员审批通过预约"""
+    try:
+        current_user = get_current_user()
+        approver_id = current_user['user_id']
+        
+        # 更新预约状态为通过 (1)
+        reservation = reservation_service.update_reservation_status(
+            reservation_id, 
+            status=1, 
+            approver_id=approver_id
+        )
+        
+        # 序列化返回
+        reservation_schema = ReservationSchema()
+        data = reservation_schema.dump(reservation)
+        return success(data=data, msg='审批成功')
+    except NotFoundError as e:
+        return fail(code=404, msg=e.message)
+    except ValidationError as e:
+        return fail(code=422, msg=e.message, data=e.payload)
+    except Exception as e:
+        return fail(code=500, msg=f'审批失败: {str(e)}')
+
+
+@admin_bp.route('/reservations/<int:reservation_id>/reject', methods=['PUT'])
+@admin_required
+@swag_from({
+    'tags': ['管理员预约审批'],
+    'summary': '审批拒绝预约',
+    'description': '管理员审批拒绝预约（需要管理员权限）',
+    'security': [{'Bearer': []}],
+    'parameters': [
+        {
+            'in': 'path',
+            'name': 'reservation_id',
+            'type': 'integer',
+            'required': True,
+            'description': '预约ID'
+        },
+        {
+            'in': 'body',
+            'name': 'body',
+            'required': False,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'reason': {'type': 'string', 'description': '拒绝理由（可选）'}
+                }
+            }
+        }
+    ],
+    'responses': {
+        200: {
+            'description': '成功审批拒绝',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'code': {'type': 'integer', 'example': 200},
+                    'msg': {'type': 'string', 'example': '已拒绝'}
+                }
+            }
+        },
+        403: {
+            'description': '需要管理员权限'
+        },
+        404: {
+            'description': '预约不存在'
+        },
+        422: {
+            'description': '状态流转无效'
+        }
+    }
+})
+def reject_reservation(reservation_id):
+    """管理员审批拒绝预约"""
+    try:
+        current_user = get_current_user()
+        approver_id = current_user['user_id']
+        
+        # 获取拒绝理由（可选）
+        json_data = request.get_json() or {}
+        reason = json_data.get('reason', '')
+        
+        # 更新预约状态为拒绝 (2)
+        reservation = reservation_service.update_reservation_status(
+            reservation_id, 
+            status=2, 
+            approver_id=approver_id
+        )
+        
+        # 保存拒绝理由
+        if reason:
+            reservation.reject_reason = reason
+            try:
+                from app import db
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                raise ValidationError(f'保存拒绝理由失败: {str(e)}')
+        
+        # 序列化返回
+        reservation_schema = ReservationSchema()
+        data = reservation_schema.dump(reservation)
+        return success(data=data, msg='已拒绝')
+    except NotFoundError as e:
+        return fail(code=404, msg=e.message)
+    except ValidationError as e:
+        return fail(code=422, msg=e.message, data=e.payload)
+    except Exception as e:
+        return fail(code=500, msg=f'审批失败: {str(e)}')

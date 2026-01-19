@@ -26,6 +26,7 @@
               :default-active="activeMenu"
               mode="horizontal"
               router
+              :ellipsis="false"
               class="header-menu cute-menu"
             >
               <el-menu-item index="/" class="menu-item">
@@ -35,6 +36,14 @@
               <el-menu-item index="/equipment" class="menu-item">
                 <el-icon><Box /></el-icon>
                 <span>仪器目录</span>
+              </el-menu-item>
+              <el-menu-item 
+                v-if="userStore.isAdmin" 
+                index="/laboratories" 
+                class="menu-item"
+              >
+                <el-icon><OfficeBuilding /></el-icon>
+                <span>实验室管理</span>
               </el-menu-item>
               <el-menu-item index="/help" class="menu-item">
                 <el-icon><QuestionFilled /></el-icon>
@@ -65,14 +74,6 @@
                   </template>
                 </el-dropdown>
               </template>
-              <template v-else>
-                <el-button type="primary" plain @click="handleLogin">
-                  登录
-                </el-button>
-                <el-button type="primary" @click="handleRegister">
-                  注册
-                </el-button>
-              </template>
             </div>
           </div>
         </div>
@@ -91,7 +92,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Document, HomeFilled, Box, QuestionFilled, User, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
+import { Document, HomeFilled, Box, QuestionFilled, User, ArrowDown, SwitchButton, OfficeBuilding } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
@@ -99,14 +100,6 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const activeMenu = computed(() => route.path)
-
-const handleLogin = () => {
-  router.push('/')
-}
-
-const handleRegister = () => {
-  ElMessage.info('注册功能开发中...')
-}
 
 const handleCommand = (command) => {
   if (command === 'logout') {
@@ -189,11 +182,11 @@ const handleCommand = (command) => {
 }
 
 .app-header {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--bg-card);
   backdrop-filter: blur(20px);
-  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 4px 20px rgba(66, 67, 82, 0.1);
   padding: 0;
-  border-bottom: 2px solid rgba(102, 126, 234, 0.1);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .header-content {
@@ -212,6 +205,9 @@ const handleCommand = (command) => {
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0; // 允许 flex 子项收缩
 
   @media (max-width: 768px) {
     gap: 10px;
@@ -273,36 +269,44 @@ const handleCommand = (command) => {
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 15px rgba(66, 67, 82, 0.3);
 }
 
 .title {
   margin: 0;
   font-size: 24px;
   font-weight: 700;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
 }
 
 .header-menu {
   background: transparent !important;
   border-bottom: none !important;
+  flex: 1;
+  min-width: 0; // 允许 flex 子项收缩
+  display: flex !important;
+  justify-content: flex-end !important; // 菜单项靠右对齐
+
+  :deep(.el-menu) {
+    display: flex !important;
+    justify-content: flex-end !important;
+    width: 100%;
+  }
 
   :deep(.el-menu-item) {
     margin: 0 8px;
     border-radius: 12px;
-    color: #666;
+    color: var(--text-secondary);
     border-bottom: none !important;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    white-space: nowrap; // 防止文字换行
 
     &::before {
       content: '';
@@ -311,21 +315,21 @@ const handleCommand = (command) => {
       left: 50%;
       width: 0;
       height: 3px;
-      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      background: var(--accent);
       border-radius: 2px;
       transform: translateX(-50%);
       transition: width 0.3s ease;
     }
 
     &:hover {
-      background: rgba(102, 126, 234, 0.1) !important;
-      color: #667eea;
+      background: rgba(66, 67, 82, 0.1) !important;
+      color: var(--accent);
       transform: translateY(-2px);
     }
 
     &.is-active {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%) !important;
-      color: #667eea;
+      background: rgba(66, 67, 82, 0.1) !important;
+      color: var(--accent);
       font-weight: 600;
 
       &::before {
