@@ -10,6 +10,7 @@ from app.utils.response import success, fail
 from app.utils.exceptions import NotFoundError
 from app.utils.auth import login_required
 from app.utils.redis_client import redis_client
+from app.services import statistics_service
 
 # 创建蓝图
 equipment_bp = Blueprint('equipment', __name__)
@@ -223,6 +224,89 @@ def get_equipment(equip_id):
         return success(data=data, msg='查询成功')
     except NotFoundError as e:
         return fail(code=404, msg=e.message)
+    except Exception as e:
+        return fail(code=500, msg=f'查询失败: {str(e)}')
+
+
+@equipment_bp.route('/top', methods=['GET'])
+@swag_from({
+    'tags': ['设备管理'],
+    'summary': '获取热门设备排行',
+    'description': '获取热门设备预约排行（按时间段统计，不需要登录）',
+    'parameters': [
+        {
+            'in': 'query',
+            'name': 'time_range',
+            'type': 'string',
+            'required': False,
+            'enum': ['week', 'month'],
+            'description': '时间范围：week（近一周）或 month（近一月）',
+            'default': 'week'
+        },
+        {
+            'in': 'query',
+            'name': 'limit',
+            'type': 'integer',
+            'required': False,
+            'description': '返回数量限制（默认10）',
+            'default': 10
+        }
+    ],
+    'responses': {
+        200: {
+            'description': '成功返回热门设备列表',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'code': {'type': 'integer', 'example': 200},
+                    'msg': {'type': 'string', 'example': '查询成功'},
+                    'data': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'id': {'type': 'integer', 'example': 1},
+                                'name': {'type': 'string', 'example': '扫描电子显微镜'},
+                                'count': {'type': 'integer', 'example': 156}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+})
+def get_top_equipments():
+    """获取热门设备排行"""
+    try:
+        # 获取查询参数
+        time_range = request.args.get('time_range', 'week')
+        limit = request.args.get('limit', type=int, default=10)
+        
+        # 验证参数
+        if time_range not in ['week', 'month']:
+            time_range = 'week'
+        if limit < 1 or limit > 50:
+            limit = 10
+        
+        # 构建缓存键
+        cache_key = f'api:equipment:top:{time_range}:{limit}'
+        
+        # 尝试从缓存获取（10分钟过期）
+        cached_data = redis_client.get(cache_key)
+        if cached_data is not None:
+            return success(data=cached_data, msg='查询成功')
+        
+        # 获取热门设备数据
+        top_equipments = statistics_service.get_top_equipment(
+            time_range=time_range,
+            limit=limit
+        )
+        
+        # 存入缓存（10分钟过期）
+        redis_client.set(cache_key, top_equipments, ex=600)
+        
+        return success(data=top_equipments, msg='查询成功')
     except Exception as e:
         return fail(code=500, msg=f'查询失败: {str(e)}')
 

@@ -2,7 +2,7 @@
 预约服务层
 处理预约相关的业务逻辑
 """
-from datetime import datetime
+from datetime import datetime, timedelta, date, time
 from sqlalchemy import and_
 from app import db
 from app.models.reservation import Reservation
@@ -224,6 +224,9 @@ def create_reservation(data, current_user):
         # 清除相关缓存
         _clear_reservation_cache()
         
+        # 注意：创建预约时不需要更新 next_avail_time，因为状态是待审(0)
+        # 只有审批通过后才会影响可用时间
+        
         return reservation
     except ValidationError:
         # 重新抛出验证错误
@@ -337,6 +340,11 @@ def update_reservation_status(reservation_id, status, approver_id=None):
     try:
         db.session.commit()
         
+        # 更新设备的下次可用时间
+        # 当预约状态变化时（通过/取消），需要重新计算可用时间
+        if equipment and status in [1, 3]:  # 审批通过或取消
+            _update_equipment_next_avail_time(equipment.id)
+        
         # 清除设备缓存，确保前端设备详情页能看到最新状态
         if equipment:
             redis_client.delete(f'api:equipment:detail:{equipment.id}')
@@ -374,10 +382,15 @@ def delete_reservation(reservation_id):
         ValidationError: 删除失败
     """
     reservation = get_reservation_by_id(reservation_id)
+    equip_id = reservation.equip_id
     
     try:
         db.session.delete(reservation)
         db.session.commit()
+        
+        # 如果删除的是已通过的预约，需要更新设备的下次可用时间
+        if reservation.status == 1:
+            _update_equipment_next_avail_time(equip_id)
         
         # 清除相关缓存
         _clear_reservation_cache(reservation_id=reservation_id)
@@ -386,6 +399,103 @@ def delete_reservation(reservation_id):
     except Exception as e:
         db.session.rollback()
         raise ValidationError(f'删除预约失败: {str(e)}')
+
+
+def _calculate_next_avail_time(equip_id):
+    """
+    计算设备的下次可用时间
+    
+    算法：
+    1. 获取设备的所有激活时间段
+    2. 获取设备的所有已通过预约（status=1），按开始时间排序
+    3. 从当前时间开始，查找第一个没有被预约占用的时间段
+    
+    Args:
+        equip_id: 设备ID
+    
+    Returns:
+        datetime: 下次可用时间，如果没有可用时间则返回 None
+    """
+    # 获取设备的激活时间段
+    time_slots = TimeSlot.query.filter(
+        TimeSlot.equip_id == equip_id,
+        TimeSlot.is_active == 1
+    ).order_by(TimeSlot.start_time).all()
+    
+    if not time_slots:
+        # 如果没有配置时间段，返回 None
+        return None
+    
+    # 获取设备的所有已通过预约（status=1），按开始时间排序
+    active_reservations = Reservation.query.filter(
+        Reservation.equip_id == equip_id,
+        Reservation.status == 1,  # 已通过
+        Reservation.start_time.isnot(None),
+        Reservation.end_time.isnot(None),
+        Reservation.end_time >= datetime.utcnow()  # 只考虑未来的预约
+    ).order_by(Reservation.start_time).all()
+    
+    now = datetime.utcnow()
+    today = now.date()
+    current_time = now.time()
+    
+    # 查找未来30天内的可用时间
+    for day_offset in range(30):
+        check_date = today + timedelta(days=day_offset)
+        
+        # 如果是今天，从当前时间开始查找；否则从当天的第一个时间段开始
+        for slot in time_slots:
+            slot_start_datetime = datetime.combine(check_date, slot.start_time)
+            slot_end_datetime = datetime.combine(check_date, slot.end_time)
+            
+            # 如果是今天且时间段已过，跳过
+            if day_offset == 0 and slot_end_datetime <= now:
+                continue
+            
+            # 检查这个时间段是否被预约占用
+            is_occupied = False
+            for reservation in active_reservations:
+                # 检查时间段是否与预约冲突
+                if reservation.start_time and reservation.end_time:
+                    # 时间段冲突：max(start1, start2) < min(end1, end2)
+                    if max(slot_start_datetime, reservation.start_time) < \
+                       min(slot_end_datetime, reservation.end_time):
+                        is_occupied = True
+                        break
+            
+            # 如果时间段没有被占用，这就是下次可用时间
+            if not is_occupied:
+                # 如果是今天且开始时间已过，返回当前时间；否则返回时间段开始时间
+                if day_offset == 0 and slot_start_datetime < now:
+                    return now
+                return slot_start_datetime
+    
+    # 如果30天内都没有可用时间，返回 None
+    return None
+
+
+def _update_equipment_next_avail_time(equip_id):
+    """
+    更新设备的下次可用时间
+    
+    Args:
+        equip_id: 设备ID
+    """
+    equipment = Equipment.query.get(equip_id)
+    if not equipment:
+        return
+    
+    next_avail_time = _calculate_next_avail_time(equip_id)
+    equipment.next_avail_time = next_avail_time
+    
+    try:
+        db.session.commit()
+        # 清除设备缓存
+        redis_client.delete(f'api:equipment:detail:{equip_id}')
+    except Exception as e:
+        # 避免更新失败影响主业务
+        print(f"Update next_avail_time failed: {e}")
+        db.session.rollback()
 
 
 def _clear_reservation_cache(reservation_id=None):

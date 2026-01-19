@@ -45,6 +45,14 @@
                 <el-icon><OfficeBuilding /></el-icon>
                 <span>实验室管理</span>
               </el-menu-item>
+              <el-menu-item 
+                v-if="userStore.isAdmin" 
+                index="/statistics" 
+                class="menu-item"
+              >
+                <el-icon><DataAnalysis /></el-icon>
+                <span>数据统计</span>
+              </el-menu-item>
               <el-menu-item index="/help" class="menu-item">
                 <el-icon><QuestionFilled /></el-icon>
                 <span>帮助中心</span>
@@ -92,7 +100,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Document, HomeFilled, Box, QuestionFilled, User, ArrowDown, SwitchButton, OfficeBuilding } from '@element-plus/icons-vue'
+import { Document, HomeFilled, Box, QuestionFilled, User, ArrowDown, SwitchButton, OfficeBuilding, DataAnalysis } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 

@@ -16,7 +16,7 @@ from app.utils.response import success, fail
 from app.utils.exceptions import NotFoundError, ValidationError
 from app.utils.auth import admin_required, get_current_user
 from app.utils.redis_client import redis_client
-from app.services import timeslot_service, reservation_service
+from app.services import timeslot_service, reservation_service, statistics_service
 from app.models.timeslot import TimeSlot
 
 # åå»ºèå¾
@@ -566,3 +566,75 @@ def reject_reservation(reservation_id):
         return fail(code=422, msg=e.message, data=e.payload)
     except Exception as e:
         return fail(code=500, msg=f'审批失败: {str(e)}')
+
+
+@admin_bp.route('/statistics', methods=['GET'])
+@admin_required
+@swag_from({
+    'tags': ['管理员统计'],
+    'summary': '获取统计数据',
+    'description': '获取系统统计数据，包括设备统计、预约统计、用户统计（需要管理员权限）',
+    'security': [{'Bearer': []}],
+    'responses': {
+        200: {
+            'description': '成功返回统计数据',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'code': {'type': 'integer', 'example': 200},
+                    'msg': {'type': 'string', 'example': '查询成功'},
+                    'data': {
+                        'type': 'object',
+                        'properties': {
+                            'equipment': {
+                                'type': 'object',
+                                'properties': {
+                                    'total': {'type': 'integer', 'example': 100},
+                                    'available': {'type': 'integer', 'example': 80},
+                                    'usage_rate': {'type': 'number', 'example': 75.5}
+                                }
+                            },
+                            'reservation': {
+                                'type': 'object',
+                                'properties': {
+                                    'total': {'type': 'integer', 'example': 500},
+                                    'approval_rate': {'type': 'number', 'example': 85.5}
+                                }
+                            },
+                            'user': {
+                                'type': 'object',
+                                'properties': {
+                                    'total': {'type': 'integer', 'example': 200},
+                                    'students': {'type': 'integer', 'example': 150}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        403: {
+            'description': '需要管理员权限'
+        }
+    }
+})
+def get_statistics():
+    """获取统计数据"""
+    try:
+        # 构建缓存键
+        cache_key = 'api:admin:statistics'
+        
+        # 尝试从缓存获取（5分钟过期）
+        cached_data = redis_client.get(cache_key)
+        if cached_data is not None:
+            return success(data=cached_data, msg='查询成功')
+        
+        # 获取统计数据
+        statistics = statistics_service.get_all_statistics()
+        
+        # 存入缓存（5分钟过期）
+        redis_client.set(cache_key, statistics, ex=300)
+        
+        return success(data=statistics, msg='查询成功')
+    except Exception as e:
+        return fail(code=500, msg=f'查询失败: {str(e)}')

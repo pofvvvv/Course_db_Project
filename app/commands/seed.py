@@ -12,6 +12,8 @@ from app.models.teacher import Teacher
 from app.models.admin import Admin
 from app.models.laboratory import Laboratory
 from app.models.equipment import Equipment
+from app.models.timeslot import TimeSlot
+from datetime import time
 
 
 @click.command('init-users')
@@ -335,8 +337,103 @@ def seed_data(equipments, users, password):
         raise click.Abort()
 
 
+@click.command('seed-timeslots')
+@click.option('--equipments', default=None, help='为指定数量的设备生成时间段（默认：所有设备）')
+@with_appcontext
+def seed_timeslots(equipments):
+    """
+    为设备生成时间段数据
+    
+    为指定数量的设备（或所有设备）生成默认的时间段配置：
+    - 工作日：09:00-12:00, 14:00-17:00
+    - 周末：09:00-12:00
+    """
+    try:
+        click.echo('开始为设备生成时间段数据...')
+        
+        # 获取所有设备
+        if equipments:
+            equipment_list = Equipment.query.limit(int(equipments)).all()
+            click.echo(f'  将为 {len(equipment_list)} 个设备生成时间段...')
+        else:
+            equipment_list = Equipment.query.all()
+            click.echo(f'  将为所有 {len(equipment_list)} 个设备生成时间段...')
+        
+        if not equipment_list:
+            click.echo('  [WARN] 没有找到设备数据，请先运行 seed-data 命令生成设备数据')
+            return
+        
+        # 默认时间段配置
+        default_slots = [
+            {'start_time': '09:00:00', 'end_time': '12:00:00', 'is_active': 1},
+            {'start_time': '14:00:00', 'end_time': '17:00:00', 'is_active': 1},
+        ]
+        
+        created_count = 0
+        skipped_count = 0
+        
+        for equipment in equipment_list:
+            # 检查该设备是否已有时间段
+            existing_slots = TimeSlot.query.filter_by(equip_id=equipment.id).count()
+            if existing_slots > 0:
+                skipped_count += 1
+                continue
+            
+            # 为该设备创建时间段
+            for slot_data in default_slots:
+                slot = TimeSlot(
+                    equip_id=equipment.id,
+                    start_time=time.fromisoformat(slot_data['start_time']),
+                    end_time=time.fromisoformat(slot_data['end_time']),
+                    is_active=slot_data['is_active']
+                )
+                db.session.add(slot)
+            
+            created_count += 1
+            
+            # 每100个设备提交一次
+            if created_count % 100 == 0:
+                db.session.commit()
+                click.echo(f'  已处理 {created_count}/{len(equipment_list)} 个设备...', nl=False)
+                click.echo('\r', nl=False)
+        
+        # 提交剩余数据
+        db.session.commit()
+        
+        click.echo(f'\r  [OK] 时间段数据生成完成！')
+        click.echo(f'    已创建: {created_count} 个设备的时间段')
+        click.echo(f'    已跳过: {skipped_count} 个设备（已有时间段）')
+        click.echo(f'\n  每个设备默认配置了以下时间段：')
+        for slot_data in default_slots:
+            click.echo(f'    - {slot_data["start_time"]} ~ {slot_data["end_time"]}')
+        
+        # 更新所有设备的下次可用时间
+        click.echo(f'\n  正在更新设备的下次可用时间...')
+        try:
+            from app.services.reservation_service import _update_equipment_next_avail_time
+            updated_count = 0
+            for equipment in equipment_list:
+                try:
+                    _update_equipment_next_avail_time(equipment.id)
+                    updated_count += 1
+                except Exception as e:
+                    # 忽略单个设备的更新失败
+                    pass
+            click.echo(f'  [OK] 已更新 {updated_count} 个设备的下次可用时间')
+        except Exception as e:
+            click.echo(f'  [WARN] 更新下次可用时间时出错: {str(e)}')
+        
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f'\n[ERROR] 时间段数据生成失败: {str(e)}', err=True)
+        import traceback
+        traceback.print_exc()
+        raise click.Abort()
+
+
 def register_commands(app):
     """注册CLI命令到Flask应用"""
     app.cli.add_command(init_users)
     app.cli.add_command(seed_data)
+    app.cli.add_command(seed_timeslots)
 

@@ -152,6 +152,47 @@
             @calendar-change="handleCalendarChange"
           />
         </el-form-item>
+        
+        <!-- 可用时间段显示 -->
+        <el-form-item v-if="createForm.equipment_id" label="可预约时间段">
+          <div class="timeslots-container">
+            <div class="timeslots-header">
+              <span class="timeslots-tip">
+                <el-icon><Clock /></el-icon>
+                <span v-if="selectedDate">
+                  已选择日期：{{ selectedDate }}，点击下方时间段快速选择
+                </span>
+                <span v-else>
+                  请先在上方选择日期，然后点击时间段快速选择时间
+                </span>
+              </span>
+            </div>
+            <div v-if="availableTimeslots.length > 0" class="timeslots-list">
+              <el-tag
+                v-for="slot in availableTimeslots"
+                :key="slot.slot_id"
+                class="timeslot-tag"
+                :class="{ 'timeslot-selected': isTimeslotSelected(slot) }"
+                @click="selectTimeslot(slot)"
+                effect="plain"
+                type="info"
+              >
+                {{ formatTimeslot(slot) }}
+              </el-tag>
+            </div>
+            <div v-else class="no-timeslots">
+              <el-empty 
+                :image-size="60" 
+                description="暂无可用时间段"
+                v-if="selectedDate"
+              />
+              <span v-else style="color: #909399; font-size: 13px;">
+                请先选择日期查看可用时间段
+              </span>
+            </div>
+          </div>
+        </el-form-item>
+        
         <el-form-item label="用途说明">
           <el-input v-model="createForm.description" type="textarea" rows="3" />
         </el-form-item>
@@ -182,7 +223,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { Calendar, Plus, Refresh } from '@element-plus/icons-vue'
+import { Calendar, Plus, Refresh, Clock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getReservationList, createReservation, cancelReservation, approveReservation, rejectReservation } from '@/api/reservation'
@@ -329,7 +370,7 @@ const fetchAvailableTimeslots = async (equipId, date = null) => {
   }
 }
 
-// 处理日期选择器日历变化
+// 处理日期选择器日历变化（用户点击日期时）
 const handleCalendarChange = async (dates) => {
   if (!createForm.equipment_id) return
   
@@ -337,9 +378,23 @@ const handleCalendarChange = async (dates) => {
   if (dates && dates.length > 0) {
     const date = dates[0]
     if (date) {
-      const dateStr = typeof date === 'string' ? date.split(' ')[0] : date.toISOString().split('T')[0]
-      selectedDate.value = dateStr
-      await fetchAvailableTimeslots(createForm.equipment_id, dateStr)
+      // 处理不同的日期格式
+      let dateStr
+      if (typeof date === 'string') {
+        dateStr = date.split(' ')[0]
+      } else if (date instanceof Date) {
+        dateStr = date.toISOString().split('T')[0]
+      } else {
+        // 可能是数组中的第一个元素
+        const dateObj = Array.isArray(date) ? date[0] : date
+        dateStr = dateObj instanceof Date ? dateObj.toISOString().split('T')[0] : dateObj.split(' ')[0]
+      }
+      
+      if (dateStr && dateStr !== selectedDate.value) {
+        selectedDate.value = dateStr
+        // 立即获取该日期的可用时间段，用于禁用不可用时间
+        await fetchAvailableTimeslots(createForm.equipment_id, dateStr)
+      }
     }
   } else {
     selectedDate.value = null
@@ -347,6 +402,18 @@ const handleCalendarChange = async (dates) => {
     await fetchAvailableTimeslots(createForm.equipment_id, null)
   }
 }
+
+// 监听时间范围变化，更新selectedDate
+watch(() => createForm.timeRange, async (newRange) => {
+  if (newRange && newRange.length > 0 && newRange[0] && createForm.equipment_id) {
+    const dateStr = newRange[0].split(' ')[0]
+    if (dateStr !== selectedDate.value) {
+      selectedDate.value = dateStr
+      // 当时间范围变化时，也要更新该日期的可用时间段
+      await fetchAvailableTimeslots(createForm.equipment_id, dateStr)
+    }
+  }
+})
 
 const searchEquipment = async (query) => {
   equipmentLoading.value = true
@@ -469,6 +536,58 @@ const formatDate = (dateStr) => {
   return new Date(dateStr).toLocaleString()
 }
 
+// 格式化时间段显示
+const formatTimeslot = (slot) => {
+  const start = slot.start_time.substring(0, 5) // 取 HH:mm
+  const end = slot.end_time.substring(0, 5)
+  return `${start} - ${end}`
+}
+
+// 检查时间段是否被选中
+const isTimeslotSelected = (slot) => {
+  if (!createForm.timeRange || createForm.timeRange.length < 2) return false
+  
+  const [startTime, endTime] = createForm.timeRange
+  if (!startTime || !endTime) return false
+  
+  // 提取时间部分进行比较
+  const startTimeOnly = startTime.split(' ')[1]?.substring(0, 5) // HH:mm
+  const endTimeOnly = endTime.split(' ')[1]?.substring(0, 5)
+  const slotStart = slot.start_time.substring(0, 5)
+  const slotEnd = slot.end_time.substring(0, 5)
+  
+  return startTimeOnly === slotStart && endTimeOnly === slotEnd
+}
+
+// 选择时间段
+const selectTimeslot = (slot) => {
+  // 如果没有选择日期，尝试从时间范围中获取日期
+  let targetDate = selectedDate.value
+  
+  if (!targetDate) {
+    // 如果时间范围中已有日期，使用它
+    if (createForm.timeRange && createForm.timeRange.length > 0 && createForm.timeRange[0]) {
+      targetDate = createForm.timeRange[0].split(' ')[0]
+    } else {
+      // 否则使用今天
+      const today = new Date()
+      targetDate = today.toISOString().split('T')[0]
+    }
+    selectedDate.value = targetDate
+    // 更新该日期的可用时间段
+    if (createForm.equipment_id) {
+      fetchAvailableTimeslots(createForm.equipment_id, targetDate)
+    }
+  }
+  
+  // 构建完整的日期时间
+  const startDateTime = `${targetDate} ${slot.start_time}`
+  const endDateTime = `${targetDate} ${slot.end_time}`
+  
+  createForm.timeRange = [startDateTime, endDateTime]
+  ElMessage.success('已选择时间段')
+}
+
 // 禁用过去的日期以及没有可用时间段的日期
 const disabledDate = (time) => {
   // 禁用今天之前的日期（今天允许选择）
@@ -490,12 +609,56 @@ const disabledDate = (time) => {
 
 // 禁用过去的时间以及不可用的时间段
 const disabledTime = (date) => {
+  if (!date || !createForm.equipment_id) {
+    return {}
+  }
+  
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const isToday = date && new Date(date).getTime() >= today.getTime() && 
-                  new Date(date).getTime() < today.getTime() + 24 * 60 * 60 * 1000
+  const selectedDateObj = new Date(date)
+  const selectedDateOnly = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate())
+  const isToday = selectedDateOnly.getTime() === today.getTime()
   
-  // 如果没有可用时间段配置，只禁用过去的时间
+  // 从传入的 date 参数中提取日期字符串
+  const dateStr = selectedDateOnly.toISOString().split('T')[0]
+  
+  // 如果 selectedDate 与当前处理的日期不匹配，且 availableTimeslots 为空，只禁用过去的时间
+  // 注意：这里我们假设如果 selectedDate 存在，availableTimeslots 已经是该日期的可用时间段
+  if (!selectedDate.value || selectedDate.value !== dateStr) {
+    // 如果还没有选择该日期，或者 availableTimeslots 不是该日期的，只禁用过去的时间
+    if (isToday) {
+      return {
+        disabledHours: () => {
+          const hours = []
+          for (let i = 0; i < now.getHours(); i++) {
+            hours.push(i)
+          }
+          return hours
+        },
+        disabledMinutes: (hour) => {
+          const minutes = []
+          if (hour === now.getHours()) {
+            for (let i = 0; i <= now.getMinutes(); i++) {
+              minutes.push(i)
+            }
+          }
+          return minutes
+        },
+        disabledSeconds: (hour, minute) => {
+          const seconds = []
+          if (hour === now.getHours() && minute === now.getMinutes()) {
+            for (let i = 0; i <= now.getSeconds(); i++) {
+              seconds.push(i)
+            }
+          }
+          return seconds
+        }
+      }
+    }
+    return {}
+  }
+  
+  // 如果 availableTimeslots 为空，只禁用过去的时间
   if (!availableTimeslots.value || availableTimeslots.value.length === 0) {
     if (isToday) {
       return {
@@ -556,6 +719,7 @@ const disabledTime = (date) => {
     })
     
     if (!hasAvailableTime) {
+      // 该小时完全不在任何可用时间段内，禁用
       disabledHours.push(hour)
     } else if (isToday && hour < now.getHours()) {
       // 如果是今天，还要禁用已经过去的小时
@@ -585,6 +749,7 @@ const disabledTime = (date) => {
       })
       
       if (!hasAvailableTime) {
+        // 该分钟不在任何可用时间段内，禁用
         disabledMinutesMap[hour].push(minute)
       } else if (isToday && hour === now.getHours() && minute <= now.getMinutes()) {
         // 如果是今天且是当前小时，禁用已过去的分钟
@@ -592,18 +757,18 @@ const disabledTime = (date) => {
       }
       
       // 为每个分钟计算禁用的秒
+      const key = `${hour}-${minute}`
       if (!hasAvailableTime || (isToday && hour === now.getHours() && minute < now.getMinutes())) {
-        const key = `${hour}-${minute}`
+        // 该分钟不可用，禁用所有秒
         disabledSecondsMap[key] = Array.from({ length: 60 }, (_, i) => i)
       } else if (isToday && hour === now.getHours() && minute === now.getMinutes()) {
-        const key = `${hour}-${minute}`
+        // 如果是当前分钟，禁用已过去的秒
         disabledSecondsMap[key] = []
         for (let second = 0; second <= now.getSeconds(); second++) {
           disabledSecondsMap[key].push(second)
         }
       } else {
         // 检查该秒是否在可用时间段内
-        const key = `${hour}-${minute}`
         disabledSecondsMap[key] = []
         for (let second = 0; second < 60; second++) {
           if (!isTimeAvailable(hour, minute, second)) {
@@ -667,5 +832,62 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: center;
+}
+
+.timeslots-container {
+  width: 100%;
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.timeslots-header {
+  margin-bottom: 12px;
+  
+  .timeslots-tip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #606266;
+    
+    .el-icon {
+      font-size: 14px;
+    }
+  }
+}
+
+.timeslots-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.timeslot-tag {
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 13px;
+  transition: all 0.3s;
+  border: 1px solid #dcdfe6;
+  
+  &:hover {
+    background-color: #ecf5ff;
+    border-color: #409eff;
+    color: #409eff;
+  }
+  
+  &.timeslot-selected {
+    background-color: #409eff;
+    border-color: #409eff;
+    color: #fff;
+  }
+}
+
+.no-timeslots {
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+  padding: 20px 0;
 }
 </style>

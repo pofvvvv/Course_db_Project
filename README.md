@@ -55,13 +55,17 @@
 │   │       ├── __init__.py    # API 蓝图注册
 │   │       ├── laboratory.py  # 实验室 API
 │   │       ├── equipment.py   # 设备 API（读写分离）
+│   │       ├── reservation.py # 预约 API
+│   │       ├── timeslot.py    # 时间段 API
 │   │       ├── auth.py        # 认证 API
 │   │       ├── users.py       # 用户信息 API
-│   │       ├── admin.py       # 管理员 API
+│   │       ├── admin.py       # 管理员 API（设备、时间段、预约审批）
 │   │       └── schemas/       # API 序列化模式
 │   ├── services/          # 业务逻辑层
 │   │   ├── lab_service.py # 实验室服务
-│   │   └── equipment_service.py # 设备服务
+│   │   ├── equipment_service.py # 设备服务
+│   │   ├── reservation_service.py # 预约服务
+│   │   └── timeslot_service.py # 时间段服务
 │   ├── utils/             # 工具类
 │   │   ├── response.py    # 统一响应格式
 │   │   ├── exceptions.py # 异常处理
@@ -77,12 +81,18 @@
 │   │   │   ├── auth.js       # 认证 API
 │   │   │   ├── users.js      # 用户 API
 │   │   │   ├── equipment.js  # 设备 API
-│   │   │   └── laboratory.js # 实验室 API
+│   │   │   ├── laboratory.js # 实验室 API
+│   │   │   ├── reservation.js # 预约 API
+│   │   │   └── timeslot.js   # 时间段 API
 │   │   ├── components/   # Vue 组件
 │   │   ├── views/        # 页面视图
 │   │   │   ├── Home.vue      # 首页（含登录）
 │   │   │   ├── Equipment.vue # 设备列表
-│   │   │   └── EquipmentDetail.vue # 设备详情
+│   │   │   ├── EquipmentDetail.vue # 设备详情
+│   │   │   ├── Reservations.vue # 预约管理
+│   │   │   ├── LaboratoryList.vue # 实验室管理（管理员）
+│   │   │   ├── Help.vue      # 帮助中心
+│   │   │   └── NotFound.vue # 404页面
 │   │   ├── stores/       # Pinia 状态管理
 │   │   │   └── user.js       # 用户状态
 │   │   ├── router/       # 路由配置
@@ -103,19 +113,19 @@
 ### 核心功能
 
 - **用户认证**: JWT Token 认证、用户登录、权限管理
-- **实验室管理**: 实验室信息管理、实验室列表查询（带缓存）
-- **设备管理**: 设备信息管理、设备状态跟踪、读写分离（普通用户读，管理员写）
-- **预约管理**: 设备预约申请、预约审批、预约查询（待实现）
+- **实验室管理**: 实验室信息管理、实验室列表查询（带缓存）、增删改操作（管理员）
+- **设备管理**: 设备信息管理、设备状态跟踪、读写分离（普通用户读，管理员写）、支持筛选和分页
+- **预约管理**: 设备预约申请、预约审批、预约查询、预约取消、状态管理（待审批/已通过/已拒绝/已取消）
+- **时间段管理**: 设备可用时间段配置、时间段查询、可用时间段计算、可用日期查询（管理员可增删改）
 - **用户管理**: 学生、教师、管理员三种角色管理
-- **时间段管理**: 设备可用时间段配置（待实现）
 - **审计日志**: 操作记录追踪（待实现）
 - **缓存机制**: Redis 缓存，提升 API 响应速度
 
 ### 用户角色
 
-- **学生**: 查看设备信息、提交预约申请、查看预约状态
-- **教师**: 查看设备信息、提交预约申请、查看预约状态
-- **管理员**: 实验室管理、设备管理（增删改）、预约审批、用户管理
+- **学生**: 查看设备信息、提交预约申请、查看预约状态、取消预约、查看可用时间段
+- **教师**: 查看设备信息、提交预约申请、查看预约状态、取消预约、查看可用时间段
+- **管理员**: 实验室管理（增删改）、设备管理（增删改）、时间段管理（增删改）、预约审批（通过/拒绝）、查看所有预约记录
 
 ### 认证与授权
 
@@ -123,6 +133,23 @@
 - **登录验证**: `@login_required` 装饰器，要求用户登录
 - **管理员权限**: `@admin_required` 装饰器，要求管理员权限
 - **密码加密**: 使用 `werkzeug.security` 进行密码哈希存储
+
+### 预约管理功能
+
+- **创建预约**: 学生和教师可以创建设备预约，需要选择设备、预约时间范围、填写用途说明
+- **预约查询**: 用户可以查看自己的预约列表，支持按设备、状态筛选
+- **预约取消**: 用户可以取消自己待审批状态的预约
+- **预约审批**: 管理员可以审批预约（通过/拒绝），拒绝时可填写拒绝理由
+- **时间段验证**: 创建预约时会验证时间段是否可用，自动排除已预约的时间段
+- **可用日期查询**: 支持查询设备在未来一段时间内的可用日期列表
+
+### 时间段管理功能
+
+- **时间段配置**: 管理员可以为设备配置可用时间段（开始时间、结束时间）
+- **时间段激活**: 支持启用/禁用时间段（`is_active` 字段）
+- **可用时间段计算**: 系统自动计算设备的可用时间段，排除已预约的时间段
+- **时间段查询**: 支持查询设备的所有时间段或仅激活的时间段
+- **可用日期查询**: 支持查询设备在未来一段时间内的可用日期（有可用时间段的日期）
 
 ## 快速开始
 
@@ -202,7 +229,24 @@ flask run
 
 后端服务将在 `http://localhost:5000` 启动。
 
-#### 4. 访问 API 文档
+#### 4. 初始化测试数据（可选）
+
+如果需要生成测试数据，可以使用以下命令：
+
+```bash
+# 初始化测试用户（学生、教师、管理员）
+flask init-users
+
+# 生成测试数据（设备、用户）
+flask seed-data --equipments 100 --users 50
+
+# 为设备生成时间段数据（重要！必须执行，否则无法预约）
+flask seed-timeslots
+```
+
+**注意**：`seed-timeslots` 命令会为所有设备生成默认时间段（09:00-12:00, 14:00-17:00），这是预约功能正常工作的前提。
+
+#### 5. 访问 API 文档
 
 启动应用后，访问 Swagger UI 文档：
 
@@ -358,6 +402,9 @@ def create_equipment():
 - **实验室列表**: 10 分钟过期
 - **设备列表**: 5 分钟过期（根据筛选条件）
 - **设备详情**: 10 分钟过期
+- **预约列表**: 5 分钟过期（根据用户和筛选条件）
+- **预约详情**: 10 分钟过期
+- **时间段列表**: 1 小时过期（仅完整列表，`only_active` 查询不使用缓存）
 - **缓存失效**: 写操作（增删改）时自动清除相关缓存
 
 ```python
@@ -417,7 +464,7 @@ flask db history
 
 #### 普通用户（需要登录）
 
-- `GET /api/v1/equipments/` - 获取设备列表（支持筛选：`lab_id`, `keyword`, `category`, `status`）
+- `GET /api/v1/equipments/` - 获取设备列表（支持筛选：`lab_id`, `keyword`, `category`, `status`，支持分页：`page`, `page_size`）
 - `GET /api/v1/equipments/<id>` - 获取设备详情
 
 #### 管理员（需要管理员权限）
@@ -426,6 +473,34 @@ flask db history
 - `PUT /api/v1/admin/equipments/<id>` - 更新设备
 - `DELETE /api/v1/admin/equipments/<id>` - 删除设备
 
+### 预约接口
+
+#### 普通用户（需要登录）
+
+- `POST /api/v1/reservations/` - 创建预约
+- `GET /api/v1/reservations/` - 获取我的预约列表（支持筛选：`equip_id`, `status`）
+- `GET /api/v1/reservations/<id>` - 获取预约详情
+- `PUT /api/v1/reservations/<id>/cancel` - 取消预约
+
+#### 管理员（需要管理员权限）
+
+- `PUT /api/v1/admin/reservations/<id>/approve` - 审批通过预约
+- `PUT /api/v1/admin/reservations/<id>/reject` - 审批拒绝预约（可提供拒绝理由）
+
+### 时间段接口
+
+#### 普通用户（需要登录）
+
+- `GET /api/v1/timeslots/equipment/<equip_id>` - 获取设备时间段列表（支持 `only_active` 参数）
+- `GET /api/v1/timeslots/equipment/<equip_id>/available` - 获取设备可用时间段（支持 `date` 参数，排除已预约时间段）
+- `GET /api/v1/timeslots/equipment/<equip_id>/available-dates` - 获取设备可用日期列表（支持 `start_date`, `days` 参数）
+
+#### 管理员（需要管理员权限）
+
+- `POST /api/v1/admin/timeslots` - 创建时间段
+- `PUT /api/v1/admin/timeslots/<id>` - 更新时间段
+- `DELETE /api/v1/admin/timeslots/<id>` - 删除时间段
+
 ### 请求认证
 
 所有需要认证的接口，请在请求头中添加：
@@ -433,6 +508,13 @@ flask db history
 ```
 Authorization: Bearer <JWT_TOKEN>
 ```
+
+### 预约状态说明
+
+- `0`: 待审批
+- `1`: 已通过
+- `2`: 已拒绝
+- `3`: 已取消
 
 ### 更多接口
 
@@ -443,8 +525,10 @@ Authorization: Bearer <JWT_TOKEN>
 - `/` 或 `/home` - 首页（含登录功能）
 - `/equipment` - 设备列表（需要登录）
 - `/equipment/:id` - 设备详情（需要登录）
-- `/reservations` - 预约管理（待实现）
-- `/help` - 帮助中心（待实现）
+- `/reservations` - 预约管理（需要登录，管理员可审批）
+- `/laboratories` - 实验室管理（需要管理员权限）
+- `/help` - 帮助中心
+- `/*` - 404 页面（通配符路由）
 
 ### 路由保护
 
@@ -499,11 +583,13 @@ Authorization: Bearer <JWT_TOKEN>
 - [x] 设备管理（读写分离）
 - [x] Redis 缓存
 - [x] 数据库索引优化
-- [x] 预约管理功能
-- [x] 时间段管理
+- [x] 预约管理功能（创建、查询、取消、审批）
+- [x] 时间段管理（创建、查询、更新、删除、可用时间段计算）
+- [x] 前端预约页面（预约列表、创建预约、审批管理）
+- [x] 管理员后台（实验室管理、设备管理、时间段管理、预约审批）
+- [x] 帮助中心页面
+- [x] 404 页面
 - [ ] 审计日志
-- [ ] 前端预约页面
-- [ ] 管理员后台
 
 ## 许可证
 

@@ -9,6 +9,7 @@ from app.models.equipment import Equipment
 from app.models.timeslot import TimeSlot
 from app.models.reservation import Reservation
 from app.utils.exceptions import NotFoundError, ValidationError
+from app.utils.redis_client import redis_client
 
 
 def _normalize_time(value):
@@ -238,6 +239,88 @@ def check_slot_usage(slot_id):
     return False
 
 
+def _calculate_next_avail_time(equip_id):
+    """
+    计算设备的下次可用时间（与 reservation_service 中的逻辑相同）
+    
+    Args:
+        equip_id: 设备ID
+    
+    Returns:
+        datetime: 下次可用时间，如果没有可用时间则返回 None
+    """
+    # 获取设备的激活时间段
+    time_slots = TimeSlot.query.filter(
+        TimeSlot.equip_id == equip_id,
+        TimeSlot.is_active == 1
+    ).order_by(TimeSlot.start_time).all()
+    
+    if not time_slots:
+        return None
+    
+    # 获取设备的所有已通过预约（status=1），按开始时间排序
+    active_reservations = Reservation.query.filter(
+        Reservation.equip_id == equip_id,
+        Reservation.status == 1,  # 已通过
+        Reservation.start_time.isnot(None),
+        Reservation.end_time.isnot(None),
+        Reservation.end_time >= datetime.utcnow()  # 只考虑未来的预约
+    ).order_by(Reservation.start_time).all()
+    
+    now = datetime.utcnow()
+    today = now.date()
+    
+    # 查找未来30天内的可用时间
+    for day_offset in range(30):
+        check_date = today + timedelta(days=day_offset)
+        
+        for slot in time_slots:
+            slot_start_datetime = datetime.combine(check_date, slot.start_time)
+            slot_end_datetime = datetime.combine(check_date, slot.end_time)
+            
+            # 如果是今天且时间段已过，跳过
+            if day_offset == 0 and slot_end_datetime <= now:
+                continue
+            
+            # 检查这个时间段是否被预约占用
+            is_occupied = False
+            for reservation in active_reservations:
+                if reservation.start_time and reservation.end_time:
+                    if max(slot_start_datetime, reservation.start_time) < \
+                       min(slot_end_datetime, reservation.end_time):
+                        is_occupied = True
+                        break
+            
+            # 如果时间段没有被占用，这就是下次可用时间
+            if not is_occupied:
+                if day_offset == 0 and slot_start_datetime < now:
+                    return now
+                return slot_start_datetime
+    
+    return None
+
+
+def _update_equipment_next_avail_time(equip_id):
+    """
+    更新设备的下次可用时间
+    """
+    equipment = Equipment.query.get(equip_id)
+    if not equipment:
+        return
+    
+    next_avail_time = _calculate_next_avail_time(equip_id)
+    equipment.next_avail_time = next_avail_time
+    
+    try:
+        db.session.commit()
+        # 清除设备缓存
+        redis_client.delete(f'api:equipment:detail:{equip_id}')
+    except Exception as e:
+        # 避免更新失败影响主业务
+        print(f"Update next_avail_time failed: {e}")
+        db.session.rollback()
+
+
 def create_timeslot(data):
     """
     创建时间段
@@ -260,6 +343,10 @@ def create_timeslot(data):
     try:
         db.session.add(slot)
         db.session.commit()
+        
+        # 更新设备的下次可用时间（时间段变更可能影响可用时间）
+        _update_equipment_next_avail_time(equip_id)
+        
         return slot
     except Exception as e:
         db.session.rollback()
@@ -303,6 +390,10 @@ def update_timeslot(slot_id, data):
 
     try:
         db.session.commit()
+        
+        # 更新设备的下次可用时间（时间段变更可能影响可用时间）
+        _update_equipment_next_avail_time(equip_id)
+        
         return slot
     except Exception as e:
         db.session.rollback()
@@ -325,6 +416,10 @@ def delete_timeslot(slot_id):
         equip_id = slot.equip_id
         db.session.delete(slot)
         db.session.commit()
+        
+        # 更新设备的下次可用时间（时间段删除可能影响可用时间）
+        _update_equipment_next_avail_time(equip_id)
+        
         return equip_id
     except Exception as e:
         db.session.rollback()

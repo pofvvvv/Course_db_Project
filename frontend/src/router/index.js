@@ -15,6 +15,12 @@ const routes = [
     meta: { title: '实验室管理', requiresAuth: true, requiresAdmin: true }
   },
   {
+    path: '/statistics',
+    name: 'Statistics',
+    component: () => import('@/views/admin/Statistics.vue'),
+    meta: { title: '数据统计', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/equipment',
     name: 'Equipment',
     component: () => import('@/views/Equipment.vue'),
@@ -31,6 +37,18 @@ const routes = [
     name: 'Reservations',
     component: () => import('@/views/Reservations.vue'),
     meta: { title: '预约管理' }
+  },
+  {
+    path: '/rules',
+    name: 'Rules',
+    component: () => import('@/views/Rules.vue'),
+    meta: { title: '规章制度' }
+  },
+  {
+    path: '/process',
+    name: 'Process',
+    component: () => import('@/views/Process.vue'),
+    meta: { title: '开放流程' }
   },
 
   // --- 以下是模块6需要插入的部分 ---

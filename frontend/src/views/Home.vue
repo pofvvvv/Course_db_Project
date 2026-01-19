@@ -156,12 +156,20 @@
                 <el-tab-pane label="近一周" name="week"></el-tab-pane>
                 <el-tab-pane label="近一月" name="month"></el-tab-pane>
               </el-tabs>
-              <div class="equipment-list">
+              <div v-loading="loadingTopEquipment" class="equipment-list">
+                <div
+                  v-if="topEquipment.length === 0 && !loadingTopEquipment"
+                  class="empty-state"
+                >
+                  <p>暂无数据</p>
+                </div>
                 <div
                   v-for="(equipment, index) in topEquipment.slice(0, 3)"
-                  :key="index"
+                  :key="equipment.id || index"
                   class="equipment-item"
                   :class="{ 'top-three': index < 3 }"
+                  @click="router.push(`/equipment/${equipment.id}`)"
+                  style="cursor: pointer;"
                 >
                   <div class="equipment-rank" :class="getRankClass(index)">
                     {{ index + 1 }}
@@ -215,7 +223,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   User,
@@ -235,6 +243,7 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { getTopEquipments } from '@/api/equipment'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -304,19 +313,36 @@ const announcements = ref([
   }
 ])
 
-// 热门设备数据
-const topEquipment = ref([
-  { name: '扫描电子显微镜 SEM-3000', count: 156 },
-  { name: 'X射线衍射仪 XRD-5000', count: 142 },
-  { name: '原子力显微镜 AFM-2000', count: 128 },
-  { name: '透射电子显微镜 TEM-4000', count: 115 },
-  { name: '傅里叶变换红外光谱仪 FTIR-8000', count: 98 },
-  { name: '核磁共振波谱仪 NMR-600', count: 87 },
-  { name: '激光共聚焦显微镜 CLSM-500', count: 76 },
-  { name: '质谱仪 MS-2000', count: 65 }
-])
-
+// 热门设备数据（实时）
+const topEquipment = ref([])
 const activeTimeRange = ref('week')
+const loadingTopEquipment = ref(false)
+
+// 获取热门设备数据
+const fetchTopEquipment = async (timeRange = 'week') => {
+  loadingTopEquipment.value = true
+  try {
+    const res = await getTopEquipments(timeRange, 10)
+    if (res.code === 200) {
+      topEquipment.value = res.data || []
+    } else {
+      console.error('获取热门设备失败:', res.msg)
+      // 如果失败，使用空数组
+      topEquipment.value = []
+    }
+  } catch (error) {
+    console.error('获取热门设备失败:', error)
+    // 如果出错，使用空数组
+    topEquipment.value = []
+  } finally {
+    loadingTopEquipment.value = false
+  }
+}
+
+// 监听时间范围变化，重新获取数据
+watch(activeTimeRange, (newRange) => {
+  fetchTopEquipment(newRange)
+})
 
 // 处理登录
 const handleLogin = async () => {
@@ -363,10 +389,6 @@ const handleForgotPassword = () => {
 
 // 处理快速入口点击
 const handleQuickAccess = (path) => {
-  if (path === '/rules' || path === '/process') {
-    ElMessage.info('该功能开发中...')
-    return
-  }
   router.push(path)
 }
 
@@ -375,17 +397,22 @@ const handleMoreAnnouncements = () => {
   ElMessage.info('更多公告功能开发中...')
 }
 
-// 处理公告点击
-const handleAnnouncementClick = (announcement) => {
-  ElMessage.info(`查看公告：${announcement.title}`)
-}
-
 // 获取排名样式类
 const getRankClass = (index) => {
   if (index === 0) return 'rank-gold'
   if (index === 1) return 'rank-silver'
   if (index === 2) return 'rank-bronze'
   return ''
+}
+
+// 页面加载时获取热门设备数据
+onMounted(() => {
+  fetchTopEquipment('week')
+})
+
+// 处理公告点击
+const handleAnnouncementClick = (announcement) => {
+  ElMessage.info(`查看公告：${announcement.title}`)
 }
 </script>
 
@@ -694,12 +721,27 @@ const getRankClass = (index) => {
 }
 
 .equipment-list {
+  min-height: 200px;
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+    font-size: 14px;
+  }
+
   .equipment-item {
     display: flex;
     align-items: center;
     gap: 16px;
     padding: 16px 0;
     border-bottom: 1px solid var(--border-light);
+    transition: all 0.3s ease;
+
+    &:hover {
+      background: rgba(102, 126, 234, 0.05);
+      padding-left: 8px;
+    }
 
     &:last-child {
       border-bottom: none;
