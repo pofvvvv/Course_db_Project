@@ -16,11 +16,11 @@
 
 ![image-20251231113317388](.././images/image1.png)
 
-选mysql，服务器地址：gateway01.us-west-2.prod.aws.tidbcloud.com，端口为4000
+选mysql，服务器地址：
 
-用户名：2A7oCHJDJFAcs2V.root
+用户名：
 
-密码：PFEbwsm0CfrBHlWe
+密码：
 
 记得添加ssl，只勾选需要ssl这一选项。
 
