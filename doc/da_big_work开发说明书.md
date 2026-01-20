@@ -79,11 +79,11 @@ DB_NAME=instrument_booking
 
 ```
 # TiDB Cloud 数据库配置
-DB_USER=2A7oCHJDJFAcs2V.root
-DB_PASSWORD=PFEbwsm0CfrBHlWe
-DB_HOST=gateway01.us-west-2.prod.aws.tidbcloud.com
-DB_PORT=4000
-DB_NAME=test
+DB_USER=
+DB_PASSWORD=
+DB_HOST=
+DB_PORT=
+DB_NAME=
 ```
 
 #### 启动后端服务
